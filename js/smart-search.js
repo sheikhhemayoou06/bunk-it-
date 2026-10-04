@@ -2233,7 +2233,7 @@
             btn.innerHTML = `<i class="fa-solid ${on ? 'fa-stop' : 'fa-microphone'}"></i>`;
             btn.title = on ? 'Stop listening' : 'Ask by voice';
         }
-        if (input) input.placeholder = message || (on ? VOICE_LANGS[voiceLang].listening : 'Ask about your attendance…');
+        if (input) input.placeholder = message || (on ? VOICE_LANGS[voiceLang].listening : 'Ask anything…');
     }
 
     function updateLangButton() {
@@ -2251,8 +2251,8 @@
         updateLangButton();
         const input = document.getElementById('siSearchInput');
         if (input && !listening) {
-            input.placeholder = voiceLang === 'hi-IN' ? 'Hindi voice on: 🎤 दबाएं और बोलें' : 'Ask about your attendance…';
-            setTimeout(() => { if (!listening) input.placeholder = 'Ask about your attendance…'; }, 3000);
+            input.placeholder = voiceLang === 'hi-IN' ? 'Hindi voice on: 🎤 दबाएं और बोलें' : 'Ask anything…';
+            setTimeout(() => { if (!listening) input.placeholder = 'Ask anything…'; }, 3000);
         }
     }
 
@@ -2260,7 +2260,7 @@
         setListeningUI(false, text);
         setTimeout(() => {
             const input = document.getElementById('siSearchInput');
-            if (input && !listening) input.placeholder = 'Ask about your attendance…';
+            if (input && !listening) input.placeholder = 'Ask anything…';
         }, 4000);
     }
 

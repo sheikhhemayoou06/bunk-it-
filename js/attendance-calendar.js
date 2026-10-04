@@ -233,6 +233,12 @@
     function init() {
         const chip = document.querySelector('.dash-date-picker');
         if (!chip) return;
+        // Show today's date right away (the dashboard fills it again later)
+        const label = document.getElementById('dashTodayDate');
+        if (label && !label.textContent.replace(/\./g, '').trim()) {
+            const now = new Date();
+            label.innerHTML = `${now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}<span class="dash-date-year"> ${now.getFullYear()}</span>`;
+        }
         chip.setAttribute('role', 'button');
         chip.setAttribute('tabindex', '0');
         chip.setAttribute('title', 'Open calendar');

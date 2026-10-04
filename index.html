@@ -6326,7 +6326,7 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="css/dashboard-redesign.css?v=7">
+    <link rel="stylesheet" href="css/dashboard-redesign.css?v=9">
     <link rel="stylesheet" href="css/attendance-management.css?v=6">
     <link rel="stylesheet" href="css/smart-search.css?v=7">
     <link rel="stylesheet" href="css/timetable-modes.css?v=6">
@@ -7035,7 +7035,7 @@
                          <!-- Populated by JS -->
                     </div>
                     <div class="dash-health-tip">
-                        <i class="fa-regular fa-lightbulb"></i> Tip: Focus on subjects that need your attention to stay above <span class="dash-min-pct">75</span>%.
+                        <i class="fa-regular fa-lightbulb"></i> <span>Tip: Focus on subjects that need your attention to stay above <span class="dash-min-pct">75</span>%.</span>
                     </div>
                 </div>
 
@@ -7610,7 +7610,7 @@
                         </button>
                         <div class="si-search-bar">
                             <input type="text" class="si-search-input" id="siSearchInput"
-                                placeholder="Ask about your attendance…"
+                                placeholder="Ask anything…"
                                 autocomplete="off" enterkeyhint="send">
                             <button type="button" class="si-lang-btn" id="siLangBtn" hidden
                                 onclick="SmartSearch.setVoiceLang()" title="Voice language">EN</button>
@@ -7932,8 +7932,9 @@
                 const dateEl = document.getElementById('dashTodayDate');
                 if (dateEl) {
                     const now = new Date();
-                    const options = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
-                    dateEl.textContent = now.toLocaleDateString('en-GB', options);
+                    // Year in its own span so phones can hide it ("Sun, 4 Oct")
+                    const short = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                    dateEl.innerHTML = `${short}<span class="dash-date-year"> ${now.getFullYear()}</span>`;
                 }
             }
 
@@ -26767,14 +26768,14 @@ Answer helpfully using this context.`;
                 </script>
                 <!-- Attendance Management System -->
                 <script src="js/attendance-management.js?v=12"></script>
-                <script src="js/smart-search.js?v=18"></script>
+                <script src="js/smart-search.js?v=19"></script>
                 <script src="js/timetable-modes.js?v=6"></script>
                 <script src="js/profile-page.js?v=8"></script>
                 <script src="js/subjects-page.js?v=6"></script>
                 <script src="js/day-check.js?v=2"></script>
                 <script src="js/notification-center.js?v=5"></script>
                 <script src="js/profile-tools.js?v=4"></script>
-                <script src="js/attendance-calendar.js?v=2"></script>
+                <script src="js/attendance-calendar.js?v=3"></script>
                 <!-- Toast Container -->
                 <div id="toast-container"></div>
 
