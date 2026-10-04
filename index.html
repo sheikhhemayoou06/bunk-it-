@@ -6344,7 +6344,7 @@
     <link rel="stylesheet" href="css/timetable-modes.css?v=6">
     <link rel="stylesheet" href="css/profile-page.css?v=6">
     <link rel="stylesheet" href="css/subjects-page.css?v=3">
-    <link rel="stylesheet" href="css/day-check.css?v=6">
+    <link rel="stylesheet" href="css/day-check.css?v=7">
 </head>
 
 <body>
@@ -6536,18 +6536,33 @@
             setTimeout(() => {
                 if (hasClass()) return run();
 
-                if (typeof showToast === 'function') {
-                    showToast('📸 Screenshot saved', "Add or select your class first. We'll read your screenshot right after.", { duration: 6000 });
+                // A class exists but none is selected: select it and go
+                const names = typeof classes !== 'undefined' ? Object.keys(classes) : [];
+                if (names.length) {
+                    const pick = localStorage.getItem('lastOpenedClass');
+                    const sel = document.getElementById('classSelector');
+                    if (sel) { sel.value = names.includes(pick) ? pick : names[0]; onClassChange(); }
+                    if (hasClass()) return run();
                 }
-                if (typeof switchPage === 'function') switchPage('attendancePage');
 
-                // Wait (up to 10 min) for a class to be created/selected, then process
+                // No class yet: read the screenshot now and show the results
+                window.pendingScreenshotData = null;
+                if (typeof previewScreenshotWithoutClass === 'function') previewScreenshotWithoutClass(files);
+
+                // When the class is created, apply the numbers already read (no second read)
                 const startedAt = Date.now();
                 const poll = setInterval(() => {
                     if (hasClass()) {
                         clearInterval(poll);
-                        run();
-                    } else if (Date.now() - startedAt > 10 * 60 * 1000) {
+                        if (window.pendingScreenshotData) {
+                            const data = window.pendingScreenshotData;
+                            window.pendingScreenshotData = null;
+                            if (typeof switchPage === 'function') switchPage('attendancePage');
+                            setTimeout(() => { resultsTableOnly = true; processJsonAndCalculate(data); }, 400);
+                        } else {
+                            run();
+                        }
+                    } else if (Date.now() - startedAt > 30 * 60 * 1000) {
                         clearInterval(poll);
                     }
                 }, 1000);
@@ -11418,7 +11433,8 @@
 
             // --- OCR & CORE CALCULATIONS ---
             async function handleImageUpload(files) {
-                if (!selectedClass) { alert("Please select a class first!"); return; }
+                // No class yet: read it anyway and offer to create the class from it
+                if (!selectedClass) { previewScreenshotWithoutClass(Array.from(files || [])); return; }
 
                 // Convert FileList to Array
                 const filesArray = Array.from(files);
@@ -11623,6 +11639,79 @@
                 resultsExtraSections().forEach(el => { el.dataset.srHidden = '1'; el.style.display = 'none'; });
                 section.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
+
+            // No class yet: read the screenshot anyway, show the table, and offer to create the class
+            async function previewScreenshotWithoutClass(files) {
+                let modal = document.getElementById('ssPreviewModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'ssPreviewModal';
+                    modal.className = 'modal';
+                    document.body.appendChild(modal);
+                }
+                const frame = (inner) => `<div class="modal-content sr-modal"><button class="modal-close" onclick="closeModal('ssPreviewModal')">&times;</button>${inner}</div>`;
+                modal.innerHTML = frame(`<div class="sr-loading"><div class="sr-spinner"></div><p>Reading your screenshot…</p></div>`);
+                openModal('ssPreviewModal');
+
+                const merged = {};
+                for (const file of files) {
+                    try {
+                        const r = await processAttendanceImage(file, true);
+                        if (r && r.success && r.data) Object.assign(merged, r.data);
+                    } catch (e) { console.error('Screenshot preview failed:', e); }
+                }
+                const codes = Object.keys(merged).filter(c => merged[c] && Number(merged[c].total) > 0);
+                if (!codes.length) {
+                    modal.innerHTML = frame(`<div class="sr-loading"><p><strong>Couldn't read attendance from this image.</strong></p><p>Use a clear screenshot that shows the attendance table, or add your class and enter numbers manually.</p></div>`);
+                    return;
+                }
+                window.pendingScreenshotData = merged;
+
+                const min = getMinAttendanceCriteria() * 100;
+                const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                let tP = 0, tT = 0;
+                const rows = codes.map(code => {
+                    const d = merged[code];
+                    const present = Math.min(Number(d.present) || 0, Number(d.total) || 0), total = Number(d.total) || 0;
+                    tP += present; tT += total;
+                    const pct = total ? (present / total) * 100 : 0;
+                    const cls = pct >= min ? 'safe' : pct >= min - 5 ? 'warn' : 'danger';
+                    return `<tr>
+                        <td class="sr-subj"><strong>${esc(d.name || code)}</strong><span>${esc(code)}</span></td>
+                        <td class="sr-num">${present}<span>/${total}</span></td>
+                        <td class="sr-pct sr-${cls}"><div class="sr-pct-top"><strong>${pct.toFixed(1)}%</strong><span class="sr-pill sr-${cls}">${pct >= min ? 'Safe' : `Below ${min}%`}</span></div>
+                            <i class="sr-bar"><b style="width:${Math.min(100, pct)}%"></b><u style="left:${min}%"></u></i></td>
+                    </tr>`;
+                }).join('');
+                const overall = tT ? (tP / tT) * 100 : 0;
+                modal.innerHTML = frame(`
+                    <div class="sr-card sr-flat">
+                        <div class="sr-head"><h2>📸 Results from your screenshot</h2><p>${codes.length} subjects · minimum ${min}%</p></div>
+                        <div class="sr-table-wrap"><table class="sr-table">
+                            <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                            <tfoot><tr><td class="sr-subj"><strong>Overall</strong><span>${codes.length} subjects</span></td><td class="sr-num">${tP}<span>/${tT}</span></td>
+                                <td class="sr-pct sr-${overall >= min ? 'safe' : 'warn'}"><strong>${overall.toFixed(1)}%</strong></td></tr></tfoot>
+                        </table></div>
+                        <p class="sr-note">Add your class to see how many classes you can miss or need, based on your timetable. These numbers are filled in automatically.</p>
+                        <button class="btn primary-btn sr-cta" onclick="createClassFromScreenshot()">➕ Create my class from these subjects</button>
+                    </div>`);
+            }
+            window.previewScreenshotWithoutClass = previewScreenshotWithoutClass;
+
+            function createClassFromScreenshot() {
+                const data = window.pendingScreenshotData || {};
+                closeModal('ssPreviewModal');
+                openAddClassModal();
+                setTimeout(() => {
+                    if (typeof fillWizardFromAI === 'function') {
+                        fillWizardFromAI({ subjects: Object.keys(data).map(code => ({ code, name: data[code].name || code, schedule: [0, 0, 0, 0, 0, 0, 0] })) }, null);
+                    }
+                    if (typeof switchModalTab === 'function') switchModalTab('form');
+                    if (typeof showToast === 'function') showToast('Subjects filled in from your screenshot', 'Add the class name and dates, then set the timetable.', { duration: 6000 });
+                }, 300);
+            }
+            window.createClassFromScreenshot = createClassFromScreenshot;
 
             function showFullAnalysis() {
                 resultsTableOnly = false;
@@ -23883,7 +23972,7 @@ RULES:
                             subjectContext = selectedClass.subjects.map(s => `- "${s.code}": ${s.name}`).join('\n');
                         }
 
-                        const prompt = `Analyze this university/college attendance screenshot and extract the attendance
+                        const prompt = subjectContext ? `Analyze this university/college attendance screenshot and extract the attendance
                     data.
 
                     CONTEXT - The student is enrolled in these specific subjects:
@@ -23891,17 +23980,29 @@ RULES:
 
                     IMPORTANT: Return ONLY a valid JSON object in this exact format (no markdown, no explanations):
                     {
-                    "SUBJECT-CODE-1": { "total": 50, "present": 45 },
-                    "SUBJECT-CODE-2": { "total": 48, "present": 40 }
+                    "SUBJECT-CODE-1": { "name": "Subject name", "total": 50, "present": 45 },
+                    "SUBJECT-CODE-2": { "name": "Subject name", "total": 48, "present": 40 }
                     }
 
                     Rules:
-                    1. Keys MUST be the exact subject codes from the list above.
+                    1. Keys MUST be the exact subject codes from the list above. "name" is the subject name as shown.
                     2. "total" = total classes held
                     3. "present" = classes attended
                     4. If a subject code in the image is slightly different (e.g., missing a letter), map it to the
                     closest matching code from the list above.
-                    5. Return ONLY the JSON, nothing else`;
+                    5. Return ONLY the JSON, nothing else` : `Read the attendance table in this university/college screenshot.
+                    Include EVERY subject row you can see.
+
+                    Return ONLY a valid JSON object (no markdown, no explanations), one entry per subject:
+                    { "<code>": { "name": "<subject name>", "total": <number>, "present": <number> } }
+
+                    Rules:
+                    1. Key = the subject/course code exactly as written in the image. If the table has no code column, use the subject name as the key.
+                    2. "name" = the subject name / description as written.
+                    3. "total" = classes held (e.g. "Max. hours", "Total", "Held", "Conducted").
+                    4. "present" = classes attended (e.g. "Att. hours", "Attended", "Present"). Do not add OD/ML.
+                    5. Copy only what is visible in the image. Never invent subjects or numbers.
+                    6. Numbers only. Return ONLY the JSON object.`;
 
 
                         // 1. Determine Key Source

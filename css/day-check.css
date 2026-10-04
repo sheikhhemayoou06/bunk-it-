@@ -954,3 +954,45 @@ body.dark-mode .ac-backdrop {
 .sr-subj {
     width: 36%;
 }
+
+/* Screenshot preview (no class yet) */
+.sr-modal {
+    max-width: 560px;
+}
+
+.sr-card.sr-flat {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    background: transparent;
+}
+
+.sr-note {
+    margin: 12px 0 10px;
+    font-size: 0.82rem;
+    color: var(--medium-text, #64748b);
+    line-height: 1.45;
+}
+
+.sr-cta {
+    width: 100%;
+}
+
+.sr-loading {
+    padding: 30px 10px;
+    text-align: center;
+}
+
+.sr-spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    border: 3px solid rgba(99, 102, 241, 0.2);
+    border-top-color: #6366f1;
+    animation: srSpin 0.8s linear infinite;
+}
+
+@keyframes srSpin {
+    to { transform: rotate(360deg); }
+}
