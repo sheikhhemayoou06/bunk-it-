@@ -36,7 +36,7 @@ messaging.onBackgroundMessage((payload) => {
 
 // ==================== END FIREBASE CLOUD MESSAGING ====================
 
-const CACHE_NAME = 'bunkit-v2.2';
+const CACHE_NAME = 'bunkit-v2.30';
 const ASSETS_TO_CACHE = [
     // NOTE: index.html intentionally NOT cached to prevent stale data issues
     // The service worker will still serve it via network-first strategy
@@ -388,6 +388,13 @@ self.addEventListener('push', (event) => {
 // Notification click handler
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
+    const data = event.notification.data || {};
+
+    // "How was today?" notification
+    if (data.kind === 'day-check' && data.date) {
+        event.waitUntil(handleDayCheckClick(event.action, data));
+        return;
+    }
 
     event.waitUntil(
         (async () => {
@@ -413,6 +420,52 @@ self.addEventListener('notificationclick', (event) => {
         })()
     );
 });
+
+async function handleDayCheckClick(action, data) {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const appClients = allClients.filter(c => c.url.startsWith(self.location.origin));
+    const status = action === 'all-present' ? 'Attended' : action === 'all-absent' ? 'Skipped' : null;
+
+    if (status) {
+        if (appClients.length) {
+            // App is open (even in the background): it saves and recalculates right away
+            appClients[0].postMessage({ type: 'QUICK_MARK', date: data.date, status });
+        } else {
+            // App closed: queue it, the app applies it the next time it opens
+            const queue = (await getFromIndexedDB('pendingQuickMarks')) || [];
+            queue.push({ date: data.date, status, className: data.className, at: new Date().toISOString() });
+            await saveToIndexedDB('pendingQuickMarks', queue);
+        }
+        await logForApp({
+            icon: status === 'Attended' ? '✅' : '❌',
+            title: `Marked all ${status === 'Attended' ? 'present' : 'absent'} from notification`,
+            body: shortDate(data.date)
+        });
+        // Remember the day as marked so no second reminder comes
+        const plan = await getFromIndexedDB('dayPlan');
+        if (plan && Array.isArray(plan.logged) && !plan.logged.includes(data.date)) {
+            plan.logged.push(data.date);
+            await saveToIndexedDB('dayPlan', plan);
+        }
+        await self.registration.showNotification(status === 'Attended' ? '✅ Marked all present' : '❌ Marked all absent', {
+            body: `${shortDate(data.date)} saved.${appClients.length ? ' Attendance updated.' : ' Your attendance updates when you open Bunk it.'}`,
+            icon: '/icon-192x192.png',
+            badge: '/badge-icon.png',
+            tag: `day-check-done-${data.date}`,
+            silent: true,
+            data: { url: '/' }
+        });
+        return;
+    }
+
+    // Tapped the notification itself: open the in-app "How was today?" panel
+    if (appClients.length) {
+        await appClients[0].focus();
+        appClients[0].postMessage({ type: 'OPEN_DAY_CHECK', date: data.date });
+    } else {
+        await clients.openWindow(`/?dayCheck=${data.date}`);
+    }
+}
 
 // Check if it's time to show notification (per-class support)
 async function checkAndShowNotification() {
@@ -488,7 +541,49 @@ async function checkAndShowNotification() {
     }
 }
 
+// Day plan mirrored by the app (js/day-check.js): { className, days: { date: classes }, logged: [dates] }
+async function dayCheckFor(className, dateStr) {
+    const plan = await getFromIndexedDB('dayPlan');
+    if (!plan || plan.className !== className || !plan.days) return null; // unknown: fall back to plain reminder
+    return { classes: plan.days[dateStr] || 0, logged: (plan.logged || []).includes(dateStr) };
+}
+
+function shortDate(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// History shown in the app's notification center (merged when the app opens)
+async function logForApp(entry) {
+    try {
+        const list = (await getFromIndexedDB('notificationLog')) || [];
+        list.unshift({ at: new Date().toISOString(), ...entry });
+        await saveToIndexedDB('notificationLog', list.slice(0, 40));
+    } catch (e) { /* ignore */ }
+}
+
 async function showNotificationForClass(className) {
+    const today = formatLocalDate(new Date());
+    const check = await dayCheckFor(className, today);
+    if (check) {
+        // No classes today (holiday / weekend / outside semester) or already marked: stay quiet
+        if (!check.classes || check.logged) return;
+        await self.registration.showNotification('📚 How was today?', {
+            body: `${shortDate(today)} · ${check.classes} class${check.classes !== 1 ? 'es' : ''} in ${className}. Mark all at once, or tap to mark each class.`,
+            icon: '/icon-192x192.png',
+            badge: '/badge-icon.png',
+            tag: `day-check-${today}`,
+            requireInteraction: true,
+            actions: [
+                { action: 'all-present', title: '✅ All Present' },
+                { action: 'all-absent', title: '❌ All Absent' }
+            ],
+            data: { kind: 'day-check', date: today, className, url: `/?dayCheck=${today}` }
+        });
+        await logForApp({ icon: '📚', title: 'How was today?', body: `${shortDate(today)} · ${check.classes} class${check.classes !== 1 ? 'es' : ''} to mark` });
+        return;
+    }
+
     const title = '📚 Attendance Log Reminder';
     const options = {
         body: `Time to log today's attendance for ${className}!`,

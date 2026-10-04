@@ -157,6 +157,7 @@ const SyncManager = {
                                 if (cloudData.timetableArrangement) localStorage.setItem(`timetable_arrangement_${cloudName}`, JSON.stringify(cloudData.timetableArrangement));
                                 if (cloudData.periodTimes) localStorage.setItem(`periodTimes_${cloudName}`, JSON.stringify(cloudData.periodTimes));
                                 if (cloudData.customSchedules) localStorage.setItem(`custom_schedules_${cloudName}`, JSON.stringify(cloudData.customSchedules));
+                                if (cloudData.timetableHistory) localStorage.setItem(`timetable_history_${cloudName}`, JSON.stringify(cloudData.timetableHistory));
                             } else {
                                 console.log(`✨ Content identical for "${cloudName}". Preserving local arrangement.`);
                                 // DON'T overwrite local timetableArrangement when content is identical
@@ -177,6 +178,7 @@ const SyncManager = {
                         if (cloudData.timetableArrangement) localStorage.setItem(`timetable_arrangement_${cloudName}`, JSON.stringify(cloudData.timetableArrangement));
                         if (cloudData.periodTimes) localStorage.setItem(`periodTimes_${cloudName}`, JSON.stringify(cloudData.periodTimes));
                         if (cloudData.customSchedules) localStorage.setItem(`custom_schedules_${cloudName}`, JSON.stringify(cloudData.customSchedules));
+                        if (cloudData.timetableHistory) localStorage.setItem(`timetable_history_${cloudName}`, JSON.stringify(cloudData.timetableHistory));
                     }
                 });
 
@@ -359,8 +361,12 @@ const SyncManager = {
                         const prefs = cloudSettings.preferences;
                         if (prefs.lastOpenedClass) localStorage.setItem('lastOpenedClass', prefs.lastOpenedClass);
                         if (prefs.userProfileName) localStorage.setItem('userProfileName', prefs.userProfileName); // Restore Name
+                        if (prefs.studentProfile) localStorage.setItem('studentProfile', JSON.stringify(prefs.studentProfile)); // Name, phone, reg no...
                         // Restore others...
                         if (prefs.minAttendance) localStorage.setItem('calcSettings_minAttendance', prefs.minAttendance);
+                        if (prefs.odmlCap) localStorage.setItem('calcSettings_odmlCap', prefs.odmlCap);
+                        if (prefs.odmlRule) localStorage.setItem('calcSettings_odmlRule', prefs.odmlRule);
+                        if (prefs.odmlAllowancePct) localStorage.setItem('calcSettings_odmlAllowancePct', prefs.odmlAllowancePct);
                     }
                 }
 
@@ -474,6 +480,10 @@ const SyncManager = {
                 const cSched = localStorage.getItem(`custom_schedules_${name}`);
                 if (cSched) data.customSchedules = JSON.parse(cSched);
 
+                // Dated timetable versions (so past days keep their old timetable on other devices)
+                const tHist = localStorage.getItem(`timetable_history_${name}`);
+                if (tHist) data.timetableHistory = JSON.parse(tHist);
+
                 await supabaseClient.from('classes').upsert({
                     user_id,
                     name,
@@ -492,9 +502,11 @@ const SyncManager = {
                     notifications,
                     // FIXED: Use correct localStorage keys matching index.html
                     minAttendance: localStorage.getItem('calcSettings_minAttendance'),
+                    odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'),
                     minMedical: localStorage.getItem('calcSettings_minMedical'),
                     isOverall: localStorage.getItem('calcSettings_isOverall'),
-                    personalGeminiKey: localStorage.getItem('personalGeminiKey') // Encrypted if possible in future
+                    personalGeminiKey: localStorage.getItem('personalGeminiKey'), // Encrypted if possible in future
+                    studentProfile: JSON.parse(localStorage.getItem('studentProfile') || 'null')
                 },
                 updated_at: new Date()
             });
@@ -657,9 +669,11 @@ const SyncManager = {
                             userProfileName,
                             notifications,
                             minAttendance: localStorage.getItem('calcSettings_minAttendance'),
+                            odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'),
                             minMedical: localStorage.getItem('calcSettings_minMedical'),
                             isOverall: localStorage.getItem('calcSettings_isOverall'),
-                            personalGeminiKey: localStorage.getItem('personalGeminiKey')
+                            personalGeminiKey: localStorage.getItem('personalGeminiKey'),
+                            studentProfile: JSON.parse(localStorage.getItem('studentProfile') || 'null')
                         },
                         updated_at: new Date()
                     });
@@ -773,6 +787,9 @@ const SyncManager = {
                 }
                 if (cloudData.periodTimes) {
                     this.safeSetItem(`periodTimes_${newRow.name}`, JSON.stringify(cloudData.periodTimes));
+                }
+                if (cloudData.timetableHistory) {
+                    this.safeSetItem(`timetable_history_${newRow.name}`, JSON.stringify(cloudData.timetableHistory));
                 }
             } else {
                 console.log(`🛡️ Realtime: Ignoring cloud update for "${newRow.name}" (Local is same or newer).`);
@@ -921,6 +938,9 @@ const SyncManager = {
                     }
                     if (cloudData.periodTimes) {
                         this.safeSetItem(`periodTimes_${row.name}`, JSON.stringify(cloudData.periodTimes));
+                    }
+                    if (cloudData.timetableHistory) {
+                        this.safeSetItem(`timetable_history_${row.name}`, JSON.stringify(cloudData.timetableHistory));
                     }
                     hasUpdates = true;
                 }
