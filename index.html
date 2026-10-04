@@ -6344,7 +6344,7 @@
     <link rel="stylesheet" href="css/timetable-modes.css?v=6">
     <link rel="stylesheet" href="css/profile-page.css?v=6">
     <link rel="stylesheet" href="css/subjects-page.css?v=3">
-    <link rel="stylesheet" href="css/day-check.css?v=4">
+    <link rel="stylesheet" href="css/day-check.css?v=6">
 </head>
 
 <body>
@@ -11343,6 +11343,8 @@
 
             function onClassChange() {
                 const className = document.getElementById('classSelector').value;
+                resultsTableOnly = false;
+                document.querySelectorAll('[data-sr-hidden]').forEach(el => { delete el.dataset.srHidden; });
                 const content = document.getElementById('classSelectedContent');
                 const timetable = document.getElementById('timetableSection');
 
@@ -11480,6 +11482,7 @@
                     // Process merged data if we got anything
                     if (Object.keys(mergedData).length > 0) {
                         console.log(`✅ Successfully processed ${filesArray.length} image(s), merged data:`, mergedData);
+                        resultsTableOnly = true; // screenshot results: show the clean table only
                         processJsonAndCalculate(mergedData);
                     } else {
                         throw new Error('Could not extract data from any of the images. Please ensure the image is clear and contains a visible attendance table.');
@@ -11549,6 +11552,84 @@
                 selectedClass.subjects.forEach(subject => { if (jsonData[subject.code]) { const weeklyFrequency = subject.schedule.reduce((a, b) => a + b, 0); if (weeklyFrequency > 0) { if (!frequencyGroups[weeklyFrequency]) { frequencyGroups[weeklyFrequency] = []; } frequencyGroups[weeklyFrequency].push(subject.code); } } }); for (const freq in frequencyGroups) { const subjectCodes = frequencyGroups[freq]; if (subjectCodes.length < 2) continue; const totals = subjectCodes.map(code => jsonData[code].total).sort((a, b) => a - b); const mid = Math.floor(totals.length / 2); const medianTotal = totals.length % 2 !== 0 ? totals[mid] : Math.round((totals[mid - 1] + totals[mid]) / 2); subjectCodes.forEach(code => { const originalData = jsonData[code]; if (Math.abs(originalData.total - medianTotal) > 15) { console.warn(`Data Correction: Subject ${code} total (${originalData.total}) is an outlier compared to its group median (${medianTotal}). Auto-correcting.`); const originalPercent = originalData.total > 0 ? (originalData.present / originalData.total) : 0; const newTotal = medianTotal; const newPresent = Math.round(newTotal * originalPercent); jsonData[code] = { total: newTotal, present: newPresent }; } }); } return jsonData;
             }
             function processJsonAndCalculate(jsonData) { jsonData = validateAndCorrectData(jsonData); const attendanceDataForCalc = [], missedSubjects = []; const classSubjectCodes = new Set(selectedClass.subjects.map(s => s.code)); selectedClass.subjects.forEach(subject => { if (jsonData[subject.code]) { attendanceDataForCalc.push({ ...subject, totalHeld: jsonData[subject.code].total, attended: jsonData[subject.code].present }); } else { missedSubjects.push(subject); } }); const unmatchedOcrCodes = Object.keys(jsonData).filter(code => !classSubjectCodes.has(code)); if (unmatchedOcrCodes.length > 0) { showToast(`⚠️ Unrecognized codes: ${unmatchedOcrCodes.join(', ')}`, 'warning'); console.warn('OCR extracted codes not in class:', unmatchedOcrCodes); } if (missedSubjects.length > 0 && attendanceDataForCalc.length > 0) { ocrResultsCache = jsonData; openPartialEntryModal(missedSubjects); return; } if (Object.keys(jsonData).length === 0) { alert('Could not extract any attendance data. Please try manual entry.'); return; } calculateAttendance(attendanceDataForCalc); }
+
+            // ==================== SCREENSHOT RESULTS: TABLE ONLY ====================
+            var resultsTableOnly = false;
+
+            // Sections on the attendance screen that the table-only view hides
+            function resultsExtraSections() {
+                return ['leavePlannerSection', 'maxLeaveRecommendation', 'leaveRecommendationContainer', 'pdfDownloadContainer', 'medicalLeaveSection']
+                    .map(id => document.getElementById(id))
+                    // The leave container may live on the Long Weekends page; leave it alone there
+                    .filter(el => el && !el.closest('#longWeekendContentPlaceholder'));
+            }
+
+            function showResultsTableOnly() {
+                const section = document.getElementById('resultsSection');
+                if (!section || !currentAnalysisData.length) return;
+                const min = getMinAttendanceCriteria() * 100;
+                const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const dateLabel = (() => {
+                    const v = document.getElementById('currentDate')?.value;
+                    return (v ? parseLocalDate(v) : new Date()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                })();
+
+                let tAtt = 0, tHeld = 0, tEff = 0;
+                const rows = currentAnalysisData.map(sub => {
+                    const split = attendanceSplit(sub.attended, sub.totalHeld, sub.odml, sub.remaining);
+                    const { stats } = getSubjectAnalysis(sub.attended, sub.totalHeld, sub.remaining, null, sub.odml);
+                    const pct = split.withPct;
+                    tAtt += split.attended; tHeld += split.totalHeld; tEff += (pct / 100) * split.totalHeld;
+                    let cls, label, detail;
+                    if (!split.totalHeld) { cls = 'none'; label = 'No data'; detail = ''; }
+                    else if (stats.stillNeed > stats.remaining) { cls = 'danger'; label = `Can't reach ${min}%`; detail = `even attending all ${stats.remaining}`; }
+                    else if (pct < min) { cls = 'warn'; label = `Attend ${stats.stillNeed} more`; detail = `of ${stats.remaining} left`; }
+                    else { cls = 'safe'; label = 'Safe'; detail = `can miss ${stats.maxSkippable}`; }
+                    return `
+                        <tr>
+                            <td class="sr-subj"><strong>${esc(sub.name)}</strong><span>${esc(sub.code)}</span></td>
+                            <td class="sr-num">${split.attended}<span>/${split.totalHeld}</span></td>
+                            <td class="sr-pct sr-${cls}">
+                                <div class="sr-pct-top"><strong>${split.totalHeld ? pct.toFixed(1) + '%' : '—'}</strong><span class="sr-pill sr-${cls}">${label}</span></div>
+                                <i class="sr-bar"><b style="width:${Math.min(100, pct)}%"></b><u style="left:${min}%"></u></i>
+                                ${detail ? `<small>${detail}</small>` : ''}
+                            </td>
+                        </tr>`;
+                }).join('');
+                const overall = tHeld ? (tEff / tHeld) * 100 : 0;
+                const overallCls = overall >= min ? 'safe' : overall >= min - 5 ? 'warn' : 'danger';
+
+                section.innerHTML = `
+                    <div class="sr-card">
+                        <div class="sr-head">
+                            <div>
+                                <h2>📸 Results from your screenshot</h2>
+                                <p>${esc(getActiveClassKey() || '')} · as of ${dateLabel} · minimum ${min}%</p>
+                            </div>
+                        </div>
+                        <div class="sr-table-wrap">
+                            <table class="sr-table">
+                                <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th></tr></thead>
+                                <tbody>${rows}</tbody>
+                                <tfoot><tr>
+                                    <td class="sr-subj"><strong>Overall</strong><span>${currentAnalysisData.length} subjects</span></td>
+                                    <td class="sr-num">${tAtt}<span>/${tHeld}</span></td>
+                                    <td class="sr-pct sr-${overallCls}"><strong>${overall.toFixed(1)}%</strong></td>
+                                </tr></tfoot>
+                            </table>
+                        </div>
+                        <button class="sr-more" onclick="showFullAnalysis()">Show full analysis</button>
+                    </div>`;
+                resultsExtraSections().forEach(el => { el.dataset.srHidden = '1'; el.style.display = 'none'; });
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            function showFullAnalysis() {
+                resultsTableOnly = false;
+                document.querySelectorAll('[data-sr-hidden]').forEach(el => { el.style.display = ''; delete el.dataset.srHidden; });
+                if (currentAnalysisData.length) calculateAttendance(currentAnalysisData);
+            }
+            window.showFullAnalysis = showFullAnalysis;
 
             function calculateAttendance(attendanceData) {
                 const resultsSection = document.getElementById('resultsSection');
@@ -11713,6 +11794,9 @@
 
                 // Call Dashboard Render after Calculation Complete
                 renderDashboard();
+
+                // Screenshot results: replace the long analysis with one clean table
+                if (resultsTableOnly) showResultsTableOnly();
 
                 // Check if calculation was triggered from Portal Mode
                 // If yes, prompt user to update portal data
@@ -12677,6 +12761,7 @@
 
             function generateManualInputs() { const subjectsGrid = document.getElementById('subjectsGrid'); subjectsGrid.innerHTML = ''; if (!selectedClass) return; selectedClass.subjects.forEach((subject, index) => { subjectsGrid.innerHTML += `<div class="subject-input"><h4>${subject.name} (${subject.code})</h4><div class="manual-input-fields"><input type="number" id="manual_total_${index}" placeholder="Total Hours Held" min="0"><input type="number" id="manual_attended_${index}" placeholder="Hours Attended" min="0"></div></div>`; }); }
             function calculateFromManual() {
+                resultsTableOnly = false;
                 const attendanceData = [];
                 if (!selectedClass) return;
                 selectedClass.subjects.forEach((subject, index) => {
