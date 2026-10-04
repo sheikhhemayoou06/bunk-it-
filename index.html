@@ -527,6 +527,9 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
+                    // First visit: no worker controls the page yet. Its first activation is not an
+                    // update, so it must not reload the page (that restarted the welcome splash).
+                    const hadController = !!navigator.serviceWorker.controller;
                     const registration = await navigator.serviceWorker.register('./sw.js');
                     console.log('ServiceWorker registration successful');
 
@@ -552,6 +555,7 @@
                     // Refresh page when new service worker takes control
                     let refreshing = false;
                     navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        if (!hadController) return; // first install, nothing to refresh
                         if (!refreshing) {
                             refreshing = true;
                             console.log('New service worker activated, reloading page...');
@@ -4750,6 +4754,14 @@
             display: block;
             max-width: 100%;
             height: auto;
+        }
+
+        /* QR drawn at 2× and shown at up to 300px: crisp square dots for cameras */
+        .cqr-frame #qrcode.cqr-crisp img,
+        .cqr-frame #qrcode.cqr-crisp canvas {
+            width: min(300px, 72vw);
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
 
         .cqr-class-name {
@@ -9026,6 +9038,13 @@
 
             let isCheckingOnboarding = false;
             function checkFirstLoginPrompt() {
+                // Wait until the user has chosen Sign in or Continue as guest:
+                // never open the setup popup behind the welcome / login screen
+                const loginScreen = document.getElementById('loginScreen');
+                if (loginScreen && getComputedStyle(loginScreen).display !== 'none') {
+                    console.log('⏸️ Onboarding waits for the login screen to close');
+                    return;
+                }
                 if (isCheckingOnboarding) {
                     console.log('🛡️ Onboarding check blocked (Lock Active)');
                     return;
@@ -11311,7 +11330,7 @@
                     }
 
                     content.style.display = 'block';
-                    timetable.style.display = 'block';
+                    if (timetable) timetable.style.display = 'block';
                     generateManualInputs();
                     generateTimetable();
 
@@ -11338,7 +11357,7 @@
                 } else {
                     selectedClass = null;
                     content.style.display = 'none';
-                    timetable.style.display = 'none';
+                    if (timetable) timetable.style.display = 'none';
 
                     // Hide timeline preview section when no class selected
                     const timelinePreviewSection = document.getElementById('timelinePreviewSection');
@@ -17155,6 +17174,7 @@ RULES:
             function generateTimetable() {
                 const grid = document.getElementById('timetableGrid');
                 const section = document.getElementById('timetableSection');
+                if (!grid) return; // old weekly grid removed; the Timetable page shows the timetable now
 
                 if (!selectedClass || !selectedClass.subjects || selectedClass.subjects.length === 0) {
                     grid.innerHTML = '<div class="timetable-empty"><p>📭 No subjects configured for this class.</p><p>Add subjects in the class settings.</p></div>';
@@ -21115,6 +21135,10 @@ RULES:
 
             function onScanSuccessTab(decodedText) {
                 try {
+                    // Compressed class QR ("BK1:" + LZ base64) from newer versions
+                    if (typeof decodedText === 'string' && decodedText.trim().startsWith('BK1:') && typeof LZString !== 'undefined') {
+                        decodedText = LZString.decompressFromBase64(decodedText.trim().slice(4)) || decodedText;
+                    }
                     const rawData = JSON.parse(decodedText);
                     let classData = {};
                     let timetableArrangement = null;
@@ -21473,6 +21497,15 @@ RULES:
             }
 
             // Renders a class QR into a container; returns false if it can't
+            // Compressed QR text ("BK1:" + LZ) ≈ half the size of the JSON: a less dense code
+            // that phone cameras read from further away. The scanner accepts both.
+            function classQRText(jsonString) {
+                if (typeof LZString === 'undefined') return jsonString;
+                const packed = 'BK1:' + LZString.compressToBase64(jsonString);
+                return packed.length < jsonString.length ? packed : jsonString;
+            }
+            window.classQRText = classQRText;
+
             function renderClassQR(container, className) {
                 const jsonString = buildClassQRPayload(className);
                 container.innerHTML = '';
@@ -21487,14 +21520,16 @@ RULES:
                     </div>`;
                     return false;
                 }
+                // Drawn at 2× and shown smaller: sharp dots that a phone camera can read
                 new QRCode(container, {
-                    text: jsonString,
-                    width: 260,
-                    height: 260,
+                    text: classQRText(jsonString),
+                    width: 520,
+                    height: 520,
                     colorDark: "#000000",
                     colorLight: "#ffffff",
                     correctLevel: QRCode.CorrectLevel.L
                 });
+                container.classList.add('cqr-crisp');
                 return true;
             }
 
@@ -21892,9 +21927,17 @@ RULES:
 
                 try {
                     qrScanner.stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { ideal: qrScanner.facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                        video: { facingMode: { ideal: qrScanner.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
                         audio: false
                     });
+                    // Keep refocusing while the phone moves (where supported)
+                    try {
+                        const track = qrScanner.stream.getVideoTracks()[0];
+                        const caps = track.getCapabilities ? track.getCapabilities() : {};
+                        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+                            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                        }
+                    } catch (e) { /* not supported */ }
                 } catch (err) {
                     console.error('Camera error:', err);
                     if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
@@ -21936,17 +21979,34 @@ RULES:
                 if (!qrScanner.busy && video.readyState >= video.HAVE_ENOUGH_DATA) {
                     qrScanner.busy = true;
                     let text = null;
+                    qrScanner.frame = (qrScanner.frame || 0) + 1;
                     try {
                         if (qrScanner.detector) {
                             const codes = await qrScanner.detector.detect(video);
                             if (codes.length) text = codes[0].rawValue;
-                        } else if (typeof jsQR === 'function') {
-                            const w = video.videoWidth, h = video.videoHeight;
-                            qrScanner.canvas.width = w;
-                            qrScanner.canvas.height = h;
-                            qrScanner.ctx.drawImage(video, 0, 0, w, h);
-                            const img = qrScanner.ctx.getImageData(0, 0, w, h);
-                            const code = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+                        }
+                        // jsQR: always without a native detector; every other frame alongside it
+                        // (some phones' detectors miss dense codes)
+                        if (!text && typeof jsQR === 'function' && (!qrScanner.detector || qrScanner.frame % 2 === 0)) {
+                            // Centre square, scaled to ≤ 720px: where people aim, and much faster
+                            const vw = video.videoWidth, vh = video.videoHeight;
+                            const side = Math.round(Math.min(vw, vh) * 0.85);
+                            const sx = Math.round((vw - side) / 2), sy = Math.round((vh - side) / 2);
+                            const out = Math.min(side, 720);
+                            qrScanner.canvas.width = out;
+                            qrScanner.canvas.height = out;
+                            qrScanner.ctx.drawImage(video, sx, sy, side, side, 0, 0, out, out);
+                            const img = qrScanner.ctx.getImageData(0, 0, out, out);
+                            let code = jsQR(img.data, out, out, { inversionAttempts: 'attemptBoth' });
+                            // Every few frames also try the whole picture (QR not centred)
+                            if (!code && qrScanner.frame % 6 === 0) {
+                                const fw = Math.min(vw, 1280), fh = Math.round(vh * (fw / vw));
+                                qrScanner.canvas.width = fw;
+                                qrScanner.canvas.height = fh;
+                                qrScanner.ctx.drawImage(video, 0, 0, fw, fh);
+                                const full = qrScanner.ctx.getImageData(0, 0, fw, fh);
+                                code = jsQR(full.data, fw, fh, { inversionAttempts: 'attemptBoth' });
+                            }
                             if (code) text = code.data;
                         }
                     } catch (e) {
@@ -21983,7 +22043,11 @@ RULES:
 
             // Accepts class QR JSON or a Bunkit share link (…?class=v2_…)
             function handleScannedQR(text) {
-                const trimmed = String(text || '').trim();
+                let trimmed = String(text || '').trim();
+                // Compressed class QR ("BK1:" + LZ base64)
+                if (trimmed.startsWith('BK1:') && typeof LZString !== 'undefined') {
+                    trimmed = LZString.decompressFromBase64(trimmed.slice(4)) || '';
+                }
                 const linkMatch = trimmed.match(/[?&]class=([^&#]+)/);
 
                 if (trimmed.startsWith('{')) {
@@ -22006,7 +22070,7 @@ RULES:
                 if (!file) return;
                 const img = new Image();
                 img.onload = () => {
-                    const MAX = 1000;
+                    const MAX = 1600;
                     const scale = Math.min(1, MAX / Math.max(img.width, img.height));
                     const c = document.createElement('canvas');
                     c.width = Math.round(img.width * scale);
@@ -24206,19 +24270,57 @@ RULES:
                                 tempTimetableArrangement = null;
                             }
 
-                            // 4. Populate Form
-                            populateClassFormFromJSON(classData);
+                            // 4. Fill the class setup wizard (name/dates → subjects → timetable)
+                            fillWizardFromAI(classData, tempTimetableArrangement);
 
                             // 5. Switch to Form Tab & Notify
                             loadingDiv.style.display = 'none';
                             switchModalTab('form');
-                            alert("✨ Class Setup Generated!\\n\\nPlease VERIFY the 'Weekly Schedule' for each subject carefully before saving.");
+                            if (typeof showToast === 'function') {
+                                showToast('✨ Class setup filled in', 'Check each step (Next) and the timetable before saving.', { duration: 6000 });
+                            }
 
                         } catch (error) {
                             console.error("AI Import Error:", error);
                             loadingDiv.style.display = 'none';
                             alert(`AI Import Failed: ${error.message}`);
                         }
+                    }
+
+                    // Put an AI-read class into the 3-step wizard so the user can check and save it
+                    function fillWizardFromAI(data, arrangement) {
+                        const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+                        set('newClassName', data.className || data.name);
+                        set('newClassLastDate', data.lastDate);
+                        set('newClassStartDate', data.startDate || data.semesterStartDate);
+                        if (Array.isArray(data.holidays) && typeof populateHolidaysInModal === 'function') populateHolidaysInModal(data.holidays);
+
+                        const subjects = (data.subjects || []).filter(s => s && (s.code || s.name));
+                        wizardSubjectsData = subjects.map(s => ({ name: s.name || s.code, code: s.code || s.name, schedule: s.schedule || [0, 0, 0, 0, 0, 0, 0] }));
+                        set('wizSubjectCount', String(subjects.length || 5));
+
+                        // Timetable grid: the AI's period arrangement, or periods built from weekly counts
+                        wizardTimetableData = {};
+                        let maxPeriods = 0;
+                        for (let d = 0; d < 7; d++) {
+                            let codes = [];
+                            if (arrangement && Array.isArray(arrangement[d])) {
+                                codes = arrangement[d].map(c => (c && typeof c === 'object' ? c.code : c) || '');
+                            } else {
+                                wizardSubjectsData.forEach(sub => {
+                                    const n = typeof sub.schedule[d] === 'number' ? sub.schedule[d] : (parseInt(sub.schedule[d]) || 0);
+                                    for (let i = 0; i < n; i++) codes.push(sub.code);
+                                });
+                            }
+                            wizardTimetableData[d] = codes;
+                            maxPeriods = Math.max(maxPeriods, codes.length);
+                        }
+                        set('wizPeriodCount', String(Math.max(maxPeriods, 1)));
+
+                        // Start at step 1 so the user reviews every step
+                        wizardCurrentStep = 1;
+                        ['wizardStep1', 'wizardStep2', 'wizardStep3'].forEach((id, i) => { const el = document.getElementById(id); if (el) el.style.display = i === 0 ? 'block' : 'none'; });
+                        if (typeof updateWizardIndicators === 'function') updateWizardIndicators(1);
                     }
 
                     function populateClassFormFromJSON(data) {
