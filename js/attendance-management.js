@@ -821,6 +821,16 @@
         }
     }
     
+    // "Formal Language and Automata" -> "FLA", "Computer Networks" -> "CN" (max 4 letters)
+    function cellLabel(p) {
+        const short = String(p.shortName || '').trim();
+        if (short && short.length <= 5 && short !== p.code) return short;
+        const ignore = ['and', 'of', 'the', 'in', 'for', 'to', 'a', 'an', '&'];
+        const words = String(p.name || p.code).split(/\s+/).filter(w => w && !ignore.includes(w.toLowerCase()));
+        const acr = words.length > 1 ? words.map(w => w[0]).join('') : String(p.name || p.code).slice(0, 4);
+        return acr.toUpperCase().slice(0, 4);
+    }
+
     function renderPeriodGridModal() {
         const sc = getSelectedClass();
         if (!sc || !sc.subjects) return '';
@@ -874,12 +884,14 @@
                     const subjColor = getSubjectColor(subjIdx >= 0 ? subjIdx : 0);
                     const glowStyle = `box-shadow: 0 0 8px 2px ${subjColor}40, inset 0 0 0 2px ${subjColor};`;
                     const safeName = p.name.replace(/'/g, "\\'");
+                    // Short subject label so each cell says which class it is (e.g. "FLA")
+                    const abbr = cellLabel(p);
                     
                     rowHtml += `<td class="pg-cell ${cssClass}" 
                                 style="${glowStyle}"
                                 onclick="window.amsOpenPeriodPopup(event, '${dateStr}', '${periodKey}', '${safeName}')"
                                 title="${p.name} | ${status}">
-                                ${shortStatus}
+                                <span class="pg-sub">${abbr}</span><span class="pg-st">${shortStatus}</span>
                                 </td>`;
                 } else {
                     rowHtml += `<td class="pg-cell pg-empty" title="${i < dObj.periods.length ? 'Free period' : 'No class'}">-</td>`;
@@ -891,7 +903,19 @@
         
         return `
         <style>
-            .period-grid-container { display: flex; gap: 20px; align-items: flex-start; margin-top: 20px; }
+            .period-grid-container { display: flex; gap: 20px; align-items: flex-start; margin-top: 20px; min-width: 0; max-width: 100%; }
+            .period-grid-container > * { min-width: 0; }
+            .ams-mark-section { min-width: 0; max-width: 100%; }
+            /* Grid scrolls inside its own box; date column and period numbers stay put */
+            .pg-table-wrapper { max-width: 100%; max-height: 72vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+            .pg-table thead th { position: sticky; top: 0; z-index: 2; }
+            .pg-table th:first-child, .pg-table td.pg-date-cell { position: sticky; left: 0; z-index: 1; background: var(--card-bg); }
+            .pg-table thead th:first-child { z-index: 3; background: var(--light-bg); }
+            .pg-table tr.pg-row-today td.pg-date-cell { background: var(--primary-grad-start, #4f46e5); color: #fff; }
+            .pg-cell { line-height: 1.05; }
+            .pg-cell .pg-sub { display: block; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.2px; opacity: 0.85; }
+            .pg-cell .pg-st { display: block; font-size: 0.82rem; font-weight: 800; }
+            .pg-null .pg-st { opacity: 0.6; }
             .pg-bulk-actions { background: var(--card-bg); padding: 15px; border-radius: 12px; min-width: 200px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
             .pg-bulk-actions button { display: block; width: 100%; text-align: left; padding: 10px; margin-bottom: 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: 'Outfit'; color: white; transition: 0.2s;}
             .pg-bulk-actions button:active { transform: scale(0.96); }
@@ -906,7 +930,7 @@
             .pg-bulk-divider { grid-column: 1 / -1; margin: 10px 0 8px; padding-top: 10px; border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--medium-text); text-transform: uppercase; letter-spacing: 0.4px; }
             
             .pg-table-wrapper { flex: 1; overflow-x: auto; background: var(--card-bg); border-radius: 12px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
-            .pg-table { width: 100%; border-collapse: separate; border-spacing: 3px; min-width: 500px; }
+            .pg-table { width: 100%; border-collapse: separate; border-spacing: 3px; min-width: ${110 + maxPeriods * 54}px; }
             .pg-table th, .pg-table td { padding: 10px 8px; text-align: center; }
             .pg-table th { background: var(--light-bg); font-weight: 700; color: var(--medium-text); border-bottom: 2px solid var(--border-color); }
             .pg-cell { cursor: pointer; user-select: none; font-weight: 700; font-size: 0.8rem; border-radius: 6px; min-width: 42px; min-height: 30px; transition: transform 0.2s, box-shadow 0.2s, filter 0.2s; }
@@ -956,16 +980,23 @@
             .pg-date-cell:hover { background: var(--primary-grad-start) !important; color: white !important; border-radius: 6px; }
             
             @media (max-width: 768px) {
-                .period-grid-container { flex-direction: column; }
-                .pg-bulk-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-                .pg-bulk-actions button { margin-bottom: 0; }
+                .period-grid-container { flex-direction: column; align-items: stretch; }
+                .pg-bulk-actions { width: 100%; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+                .pg-bulk-actions button { margin-bottom: 0; padding: 9px 10px; font-size: 0.82rem; }
+                .pg-bulk-actions > div:first-child { grid-column: 1 / -1; margin-bottom: 2px !important; }
+                .pg-table-wrapper { width: 100%; }
+                .pg-table { border-spacing: 2px; min-width: ${92 + maxPeriods * 48}px; }
+                .pg-table th, .pg-table td { padding: 6px 4px; }
+                .pg-table td.pg-date-cell { font-size: 0.78rem; padding-left: 6px; padding-right: 6px; }
+                .pg-cell { min-width: 40px; }
+                .pg-legend { gap: 8px 12px; font-size: 0.78rem; padding: 8px 10px; }
+                .pg-range-info { font-size: 0.78rem; }
             }
         </style>
         
         <div class="ams-mark-section" style="margin-top: 24px;">
             <div class="ams-section-header" style="justify-content: center; text-align: center; display: block;">
-                <div class="ams-section-title" style="font-size: 1.5rem; justify-content: center;"><i class="fa-solid fa-chart-simple" style="color:var(--primary-grad-start)"></i> Period-wise Attendance</div>
-                <div class="ams-section-subtitle">View and edit your attendance by period. Click on any cell to change status.</div>
+                <div class="ams-section-subtitle">Tap a cell to change its status · tap a date for the whole day.</div>
             </div>
             
             <div class="pg-range-info">

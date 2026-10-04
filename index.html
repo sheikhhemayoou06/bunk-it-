@@ -10085,8 +10085,52 @@
             }
 
             // GLOBAL: Reload Classes Logic (Exposed for AuthManager/SyncManager)
+            // The key a class is stored under is its real name. Classes saved by the wizard have no
+            // .name, and code that saved classes[selectedClass.name] created a duplicate "undefined" class.
+            function getActiveClassKey() {
+                const sel = document.getElementById('classSelector')?.value;
+                if (sel && classes[sel]) return sel;
+                if (selectedClass?.name && classes[selectedClass.name]) return selectedClass.name;
+                return sel || selectedClass?.name || null;
+            }
+            window.getActiveClassKey = getActiveClassKey;
+
+            // Save the working class back under its real key
+            function persistSelectedClass() {
+                const key = getActiveClassKey();
+                if (!key || !selectedClass) return;
+                selectedClass.name = key;
+                classes[key] = selectedClass;
+                saveToStorage();
+            }
+            window.persistSelectedClass = persistSelectedClass;
+
+            // Merge "undefined"/"null" copies (from the old bug) back into the real class, then remove them
+            function repairDuplicateClasses() {
+                const bad = Object.keys(classes).filter(k => k === 'undefined' || k === 'null' || k === '');
+                if (!bad.length) return;
+                const real = Object.keys(classes).filter(k => !bad.includes(k));
+                const codes = (c) => (c?.subjects || []).map(x => x.code).sort().join('|');
+                bad.forEach(k => {
+                    const copy = classes[k];
+                    const match = real.find(r => codes(classes[r]) === codes(copy)) || (real.length === 1 ? real[0] : null);
+                    if (match) {
+                        const target = classes[match];
+                        const newer = (a, b) => String(a?.baselineDate || '') > String(b?.baselineDate || '');
+                        if (copy.portalSetup && (!target.portalSetup || newer(copy.portalSetup, target.portalSetup))) {
+                            target.portalSetup = copy.portalSetup;
+                        }
+                        target.name = match;
+                    }
+                    if (match || !copy?.subjects?.length) delete classes[k];
+                });
+                localStorage.setItem('attendanceClasses_v2', JSON.stringify(classes));
+                console.log('🧹 Removed duplicate class entries:', bad);
+            }
+
             window.loadClasses = function () {
                 loadFromStorage();
+                repairDuplicateClasses();
                 
                 // AUTO-REMOVE Example/Demo Class if user has their own classes (Do this BEFORE populating UI)
                 if (typeof autoRemoveExampleClass === 'function') autoRemoveExampleClass();
@@ -11320,7 +11364,7 @@
                 currentAnalysisData = [];
 
                 if (className && classes[className]) {
-                    selectedClass = { ...classes[className] };
+                    selectedClass = { ...classes[className], name: className };
                     document.getElementById('lastDate').value = selectedClass.lastDate;
 
                     // AUTO-POPULATE: Semester Start Date from Portal Mode settings
@@ -17886,10 +17930,8 @@ RULES:
                             selectedClass.portalSetup.baselineDate = newBaselineDate;
                             selectedClass.portalSetup.baselineData = updatedBaseline;
 
-                            // Save persistent
-                            const classes = JSON.parse(localStorage.getItem('attendanceClasses_v2')) || {};
-                            classes[selectedClass.name] = selectedClass;
-                            localStorage.setItem('attendanceClasses_v2', JSON.stringify(classes));
+                            // Save persistent (under the class's real key)
+                            persistSelectedClass();
 
                             // FIX: Sync to cloud
                             if (window.SyncManager) SyncManager.uploadAll();
@@ -18912,7 +18954,7 @@ RULES:
                     
                     <div class="form-group">
                         <label>Portal Start Date (Baseline Date):</label>
-                        <input type="date" id="portalStartDate" value="${new Date().toISOString().split('T')[0]}">
+                        <input type="date" id="portalStartDate" value="${formatLocalDate(new Date())}">
                         <p style="font-size: 0.8rem; color: var(--medium-text);">Enter attendance data as of this date.</p>
                     </div>
 
@@ -19018,7 +19060,7 @@ RULES:
                     active: true
                 };
 
-                classes[selectedClass.name || document.getElementById('classSelector').value] = selectedClass; // Ensure update in main object
+                classes[getActiveClassKey()] = selectedClass; // Ensure update in main object (real key)
                 saveToStorage();
                 closeModal('portalSetupModal');
                 initPortal();
@@ -19036,7 +19078,7 @@ RULES:
             function disablePortalMode() {
                 if (confirm("Are you sure you want to disable Portal Mode? Your baseline data will be removed, but daily logs will remain.")) {
                     delete selectedClass.portalSetup;
-                    classes[selectedClass.name || document.getElementById('classSelector').value] = selectedClass;
+                    classes[getActiveClassKey()] = selectedClass;
                     saveToStorage();
                     closeModal('portalSetupModal');
                     initPortal();
@@ -19063,20 +19105,22 @@ RULES:
                         return;
                     }
 
-                    // Portal Active State
-                    portalSection.style.display = 'block';
-                    uploadSection.style.display = 'none'; // Hide upload in portal mode
+                    // Portal Active State (some of these elements no longer exist in the new layout)
+                    if (portalSection) portalSection.style.display = 'block';
+                    if (uploadSection) uploadSection.style.display = 'none'; // Hide upload in portal mode
                     if (manualInput) manualInput.style.display = 'none';
                     if (jsonInput) jsonInput.style.display = 'none';
-                    portalBtn.textContent = "Portal Settings";
-                    portalBtn.className = "btn secondary-btn"; // Change style to indicate active/settings
+                    if (portalBtn) {
+                        portalBtn.textContent = "Portal Settings";
+                        portalBtn.className = "btn secondary-btn"; // Change style to indicate active/settings
+                    }
 
                     renderPortalDashboard();
                     calculateFromPortal(); // Auto-calculate on load
                 } else {
                     // Standard Mode
-                    portalSection.style.display = 'none';
-                    uploadSection.style.display = 'block';
+                    if (portalSection) portalSection.style.display = 'none';
+                    if (uploadSection) uploadSection.style.display = 'block';
                     if (portalBtn) {
                         portalBtn.textContent = "Student Portal";
                         portalBtn.className = "btn info-btn";
@@ -19331,16 +19375,14 @@ RULES:
 
                 // UPDATE: User requested "reset logic" - so we update the baseline date to NOW.
                 // This makes the current state the new anchor point.
-                const newBaselineDate = new Date().toISOString().split('T')[0];
+                const newBaselineDate = formatLocalDate(new Date());
 
                 // Update both data and date
                 selectedClass.portalSetup.baselineDate = newBaselineDate;
                 selectedClass.portalSetup.baselineData = updatedBaseline;
 
-                // Save class data
-                const classes = JSON.parse(localStorage.getItem('attendanceClasses_v2')) || {};
-                classes[selectedClass.name] = selectedClass;
-                localStorage.setItem('attendanceClasses_v2', JSON.stringify(classes));
+                // Save class data (under the class's real key)
+                persistSelectedClass();
 
                 // FIX: Sync to cloud
                 if (window.SyncManager) SyncManager.uploadAll();
@@ -19377,7 +19419,7 @@ RULES:
                 }
 
                 // Get the calculation date (today by default, or from user input if available)
-                const calculationDate = new Date().toISOString().split('T')[0];
+                const calculationDate = formatLocalDate(new Date());
 
                 // Create baseline data from current calculation
                 const newBaseline = {};
@@ -19396,10 +19438,8 @@ RULES:
                 selectedClass.portalSetup.baselineDate = calculationDate;
                 selectedClass.portalSetup.baselineData = newBaseline;
 
-                // Save to localStorage
-                const classes = JSON.parse(localStorage.getItem('attendanceClasses_v2')) || {};
-                classes[selectedClass.name] = selectedClass;
-                localStorage.setItem('attendanceClasses_v2', JSON.stringify(classes));
+                // Save to localStorage (under the class's real key)
+                persistSelectedClass();
 
                 // FIX: Sync to cloud
                 if (window.SyncManager) SyncManager.uploadAll();
@@ -26869,7 +26909,7 @@ Answer helpfully using this context.`;
                     });
                 </script>
                 <!-- Attendance Management System -->
-                <script src="js/attendance-management.js?v=12"></script>
+                <script src="js/attendance-management.js?v=14"></script>
                 <script src="js/smart-search.js?v=19"></script>
                 <script src="js/timetable-modes.js?v=6"></script>
                 <script src="js/profile-page.js?v=8"></script>
