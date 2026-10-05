@@ -273,6 +273,35 @@
         return String(val).split(',').filter(v => v.trim() !== '0' && v.trim() !== '').length;
     }
 
+    // ---- Original vs OD/ML: always computed from separate counts ----
+    // present = classes you sat in; odml = Duty/Medical leave hours; held = classes held so far
+    function countsOf(sub) {
+        const attended = Number(sub.attended) || 0;
+        const odml = Math.min(Number(sub.odml) || 0, attended);
+        return { present: attended - odml, odml, held: Number(sub.totalHeld) || 0, remaining: Number(sub.remaining) || 0 };
+    }
+
+    // { own: % present only, withOd: % with OD/ML under the college rule (allowance / cap) }
+    // finalTotal keeps the OD/ML allowance (N% of the semester) the same in every scenario
+    function pctPair(present, odml, held, finalTotal) {
+        if (!held) return { own: 0, withOd: 0 };
+        const rest = Math.max(0, (finalTotal || held) - held);
+        if (typeof attendanceSplit === 'function') {
+            const sp = attendanceSplit(present + odml, held, odml, rest);
+            // eligible = own attendance meets the medical minimum (OD/ML only counts then)
+            return { own: sp.withoutPct, withOd: sp.withPct, eligible: sp.eligible || !odml, ownMin: sp.ownMin };
+        }
+        return { own: (present / held) * 100, withOd: ((present + odml) / held) * 100, eligible: true };
+    }
+
+    // "75.0%" with the original % underneath when OD/ML changes it
+    function pctCell(pair, hasOdml, color) {
+        const main = `<strong${color ? ` style="color:${color};"` : ''}>${pair.withOd.toFixed(1)}%</strong>`;
+        if (!(hasOdml && Math.abs(pair.withOd - pair.own) > 0.05)) return main;
+        const low = pair.eligible === false;
+        return `${main}<br><small style="${low ? 'color:var(--si-danger, #ef4444);font-weight:700;' : 'opacity:0.75;'}">own ${pair.own.toFixed(1)}%${low ? ` (below ${pair.ownMin}%)` : ''}</small>`;
+    }
+
     function analyzeSubject(sub, minCriteria) {
         const attended = Number(sub.attended) || 0;
         const totalHeld = Number(sub.totalHeld) || 0;
@@ -610,19 +639,27 @@
             });
         }
 
-        let totA = 0, totT = 0, totM = 0, totB = 0, totR = 0;
+        let totM = 0, totHeldNow = 0, totPresNow = 0, totEffNow = 0;
+        let totHeldAfter = 0, totPresAfter = 0, totEffAfter = 0, totF = 0, totPresFinal = 0, totEffFinal = 0;
         let atRisk = 0;
         const rows = data.filter(sub => per[sub.code].m > 0 || !onlySubs.length).map(sub => {
-            const A = Number(sub.attended) || 0;
-            const T = Number(sub.totalHeld) || 0;
+            const c = countsOf(sub);
+            const T = c.held;
             const { R, m, b } = per[sub.code];
-            totA += A; totT += T; totM += m; totB += b; totR += R;
-
-            const current = T > 0 ? (A / T) * 100 : 0;
-            const afterBreak = (T + b + m) > 0 ? ((A + b) / (T + b + m)) * 100 : 0;
-            const finalPct = (T + R) > 0 ? ((A + R - m) / (T + R)) * 100 : 0;
-            const minNeeded = Math.ceil(minCriteria * (T + R) - 1e-9);
-            const skipsAllowed = Math.max(0, A + R - minNeeded);
+            const F = T + R;
+            totM += m;
+            // Now / right after the leave (attending every class before it) / semester end (attending the rest)
+            const now = pctPair(c.present, c.odml, T, F);
+            const after = pctPair(c.present + b, c.odml, T + b + m, F);
+            const fin = pctPair(c.present + R - m, c.odml, F, F);
+            totHeldNow += T; totPresNow += c.present; totEffNow += now.withOd / 100 * T;
+            totHeldAfter += T + b + m; totPresAfter += c.present + b; totEffAfter += after.withOd / 100 * (T + b + m);
+            totF += F; totPresFinal += c.present + R - m; totEffFinal += fin.withOd / 100 * F;
+            const current = now.withOd, afterBreak = after.withOd, finalPct = fin.withOd;
+            // Classes you can still miss (shared rule: OD/ML allowance + own-attendance minimum)
+            const skipsAllowed = typeof getSubjectAnalysis === 'function'
+                ? getSubjectAnalysis(c.present + c.odml, T, R, minCriteria, c.odml).stats.maxSkippable
+                : Math.max(0, c.present + c.odml + R - Math.ceil(minCriteria * F - 1e-9));
             const skipsLeft = skipsAllowed - m;
             const ok = skipsLeft >= 0;
             if (m > 0 && !ok) atRisk++;
@@ -630,19 +667,25 @@
             const badge = m === 0 ? '<span class="si-badge safe">No class</span>'
                 : ok ? `<span class="si-badge ${skipsLeft <= 2 ? 'warning' : 'safe'}">✅ ${skipsLeft} left</span>`
                     : `<span class="si-badge danger">❌ Short by ${-skipsLeft}</span>`;
+            const hasOd = c.odml > 0;
             return `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
                 <td style="text-align:center;">${m}</td>
-                <td>${current.toFixed(1)}%</td>
-                <td>${afterBreak.toFixed(1)}%</td>
-                <td style="color:${finalPct >= minPercent ? 'var(--si-success, #10b981)' : 'var(--si-danger, #ef4444)'};font-weight:600;">${finalPct.toFixed(1)}%</td>
+                <td>${pctCell(now, hasOd)}</td>
+                <td>${pctCell(after, hasOd)}</td>
+                <td>${pctCell(fin, hasOd, finalPct >= minPercent ? 'var(--si-success, #10b981)' : 'var(--si-danger, #ef4444)')}</td>
                 <td>${badge}</td>
             </tr>`;
         }).join('');
 
-        const overallNow = totT > 0 ? (totA / totT) * 100 : 0;
-        const overallAfter = (totT + totB + totM) > 0 ? ((totA + totB) / (totT + totB + totM)) * 100 : 0;
-        const overallFinal = (totT + totR) > 0 ? ((totA + totR - totM) / (totT + totR)) * 100 : 0;
+        // Overall: OD/ML rule applied per subject, original = present only
+        const overallNow = totHeldNow ? (totEffNow / totHeldNow) * 100 : 0;
+        const overallAfter = totHeldAfter ? (totEffAfter / totHeldAfter) * 100 : 0;
+        const overallFinal = totF ? (totEffFinal / totF) * 100 : 0;
+        const ownNow = totHeldNow ? (totPresNow / totHeldNow) * 100 : 0;
+        const ownAfter = totHeldAfter ? (totPresAfter / totHeldAfter) * 100 : 0;
+        const ownFinal = totF ? (totPresFinal / totF) * 100 : 0;
+        const anyOd = data.some(sub => countsOf(sub).odml > 0);
         const safe = atRisk === 0;
 
         return {
@@ -657,11 +700,11 @@
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value ${overallAfter >= minPercent ? 'safe' : 'danger'}">${overallAfter.toFixed(1)}%</div>
-                        <div class="si-stat-label">Right after leave</div>
+                        <div class="si-stat-label">Right after leave${anyOd ? `<br>own ${ownAfter.toFixed(1)}%` : ''}</div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value ${overallFinal >= minPercent ? 'safe' : 'danger'}">${overallFinal.toFixed(1)}%</div>
-                        <div class="si-stat-label">Semester end*</div>
+                        <div class="si-stat-label">Semester end*${anyOd ? `<br>own ${ownFinal.toFixed(1)}%` : ''}</div>
                     </div>
                 </div>
                 <p style="margin-top:14px;">
@@ -677,7 +720,8 @@
                     <thead><tr><th>Subject</th><th>Missed</th><th>Now</th><th>After leave</th><th>Sem end*</th><th>Skips left</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
-                <p style="font-size:0.78rem;margin-top:8px;opacity:0.75;">* Semester end % assumes you attend every other class until ${fmtShort(endStr)}. "Skips left" = classes you can still miss after this leave and stay at ${minPercent}%.</p>
+                <p style="font-size:0.78rem;margin-top:8px;opacity:0.75;">* Semester end % assumes you attend every other class until ${fmtShort(endStr)}. "Skips left" = classes you can still miss after this leave and stay at ${minPercent}%.${anyOd ? ` Big % = with OD/ML under your college rule; "own" = classes you actually attended.` : ''}</p>
+                ${!safe || examHits.length ? betterDaysHtml(cls, data, leaveSet) : ''}
                 ${notesHtml}
             `
         };
@@ -700,6 +744,9 @@
         'सत्ताईस': 27, 'अट्ठाईस': 28, 'अठ्ठाईस': 28, 'उनतीस': 29, 'तीस': 30, 'इकतीस': 31
     };
     const HI_WORDS = [
+        // which day to take leave
+        [/(?:कौन\s*(?:सा|से)|किस)\s*(?:दिन|तारीख)\s*(?:को\s*)?(?:छुट्टी|छुट्टि\S*|बंक|छोड़\S*|छोड़\S*)/g, ' which day to take leave '],
+        [/(?:सबसे\s*)?(?:अच्छा|सही|बढ़िया)\s*दिन\s*(?:छुट्टी|बंक)?/g, ' best day to take leave '],
         // your data: holidays, OD/ML, exams, timetable, profile, semester
         [/अगली\s*छुट्टी\s*(?:कब)?/g, ' next holiday '],
         [/(?:छुट्टियों|छुट्टियाँ|छुट्टियां)\s*(?:की\s*)?(?:लिस्ट|सूची)|कौन\s*(?:कौन\s*)?सी\s*छुट्टि\S*|(?:छुट्टियाँ|छुट्टियां)\s*कब/g, ' holiday list '],
@@ -747,6 +794,8 @@
     ];
     // Hinglish typed in English letters
     const HINGLISH_WORDS = [
+        [/\b(?:kaun|kon|kau?nsa|konsa|kis)\s*(?:sa\s*)?din\b.*\b(?:chh?utt?i|bunk|chh?od\w*|leave)\b/gi, 'which day to take leave'],
+        [/\b(?:best|accha|achha)\s+din\b/gi, 'best day to take leave'],
         [/\bagli\s+chh?utt?i\s*(?:kab)?\b/gi, 'next holiday'],
         [/\bchh?utt?iy(?:on|an|aan)\s+(?:ki\s+)?(?:list|kab)\b/gi, 'holiday list'],
         [/\b(?:mera|meri)\s+(?:naam|profile|details?|jankari|account)\b/gi, 'my profile'],
@@ -917,10 +966,12 @@
 
         let subjectRows = '';
         let totalAttended = 0, totalHeld = 0, totalRemaining = 0;
+        let effNow = 0, effNew = 0, heldNew = 0;
         let subjectsAffected = 0;
 
         data.forEach(sub => {
             const s = analyzeSubject(sub, minCriteria);
+            const c = countsOf(sub);
             totalAttended += s.attended;
             totalHeld += s.totalHeld;
             totalRemaining += s.remaining;
@@ -929,22 +980,29 @@
             const missForSubject = Math.round(numMiss * (classesPerDay > 0 ? classesPerDay / data.reduce((a, b) => a + (b.schedule ? b.schedule.reduce((s, v) => s + parseScheduleVal(v), 0) / 7 : 1), 0) : 1 / data.length) * data.length);
 
             const newTotal = s.totalHeld + missForSubject;
-            const newPercent = newTotal > 0 ? (s.attended / newTotal) * 100 : 0;
+            // Missing classes: present and OD/ML stay the same, held grows
+            const F = c.held + c.remaining;
+            const nowPair = pctPair(c.present, c.odml, c.held, F);
+            const newPair = pctPair(c.present, c.odml, newTotal, F);
+            const newPercent = newPair.withOd;
+            effNow += nowPair.withOd / 100 * c.held; effNew += newPair.withOd / 100 * newTotal; heldNew += newTotal;
             const drop = s.currentPercent - newPercent;
-            const status = newPercent >= minPercent ? (newPercent >= 85 ? 'safe' : 'warning') : 'danger';
+            // OD/ML stops counting if own attendance falls below the medical minimum
+            const ok = newPercent >= minPercent && newPair.eligible;
+            const status = ok ? (newPercent >= 85 ? 'safe' : 'warning') : 'danger';
 
-            if (newPercent < minPercent) subjectsAffected++;
+            if (!ok) subjectsAffected++;
 
             subjectRows += `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
-                <td>${s.currentPercent.toFixed(1)}%</td>
-                <td>${newPercent.toFixed(1)}%</td>
+                <td>${pctCell(nowPair, c.odml > 0)}</td>
+                <td>${pctCell(newPair, c.odml > 0)}</td>
                 <td><span class="si-badge ${status}">${drop > 0 ? '↓' : '→'} ${drop.toFixed(1)}%</span></td>
             </tr>`;
         });
 
-        const overallCurrent = totalHeld > 0 ? (totalAttended / totalHeld) * 100 : 0;
-        const overallNew = (totalHeld + numMiss) > 0 ? (totalAttended / (totalHeld + numMiss)) * 100 : 0;
+        const overallCurrent = totalHeld > 0 ? (effNow / totalHeld) * 100 : 0;
+        const overallNew = heldNew > 0 ? (effNew / heldNew) * 100 : 0;
         const overallDrop = overallCurrent - overallNew;
         const overallStatus = overallNew >= minPercent ? 'safe' : 'danger';
 
@@ -967,7 +1025,7 @@
                         <div class="si-stat-label">At Risk</div>
                     </div>
                 </div>
-                <p style="margin-top:14px;">If you miss the next <strong>${numMiss}</strong> classes, your overall attendance drops from <strong>${overallCurrent.toFixed(1)}%</strong> to <strong>${overallNew.toFixed(1)}%</strong>. ${subjectsAffected > 0 ? `<span style="color:var(--si-danger);font-weight:600;">${subjectsAffected} subject(s) will fall below ${minPercent}%!</span>` : `You'll still be above the ${minPercent}% threshold.`}</p>
+                <p style="margin-top:14px;">If you miss the next <strong>${numMiss}</strong> classes, your overall attendance drops from <strong>${overallCurrent.toFixed(1)}%</strong> to <strong>${overallNew.toFixed(1)}%</strong>. ${subjectsAffected > 0 ? `<span style="color:var(--si-danger);font-weight:600;">${subjectsAffected} subject${subjectsAffected !== 1 ? 's' : ''} at risk: below ${minPercent}%, or own attendance below the medical minimum (then OD/ML stops counting).</span>` : `You'll still be above the ${minPercent}% threshold.`}</p>
                 <table class="si-subject-table">
                     <thead><tr><th>Subject</th><th>Current</th><th>After</th><th>Impact</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
@@ -1242,7 +1300,7 @@
                 <td><strong>${sub.name || sub.code}</strong></td>
                 <td>${s.currentPercent.toFixed(1)}%</td>
                 <td>${s.withoutPercent.toFixed(1)}%</td>
-                <td>${s.attended}/${s.totalHeld}</td>
+                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
                 <td><span class="si-badge ${status}">${s.stillNeed > 0 ? `Need ${s.stillNeed}` : '✅ Safe'}</span></td>
             </tr>`;
         }).join('');
@@ -1267,7 +1325,7 @@
                 </div>
                 ${atRisk.length > 0 ? `<p style="margin-top:14px;color:var(--si-danger);font-weight:600;">⚠️ ${atRisk.map(s => s.name || s.code).join(', ')} ${atRisk.length > 1 ? 'are' : 'is'} below the required ${minPercent}%!</p>` : '<p style="margin-top:14px;">No subjects are currently below the threshold. Keep it up! 💪</p>'}
                 <table class="si-subject-table">
-                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Without</th><th>Attended</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Original</th><th>Present</th><th>Status</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
                 </table>
             `
@@ -1290,7 +1348,7 @@
                 <td><strong>${sub.name || sub.code}</strong></td>
                 <td style="color:var(--si-safe);font-weight:600;">${s.currentPercent.toFixed(1)}%</td>
                 <td>${s.withoutPercent.toFixed(1)}%</td>
-                <td>${s.attended}/${s.totalHeld}</td>
+                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
                 <td><span class="si-badge safe">Can skip ${s.maxSkippable}</span></td>
             </tr>`;
         }).join('');
@@ -1301,7 +1359,7 @@
             body: `
                 <p>Here are your best-performing subjects ranked by attendance percentage. These have the most room for safe skips.</p>
                 <table class="si-subject-table">
-                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Without</th><th>Attended</th><th>Buffer</th></tr></thead>
+                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Original</th><th>Present</th><th>Buffer</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
                 </table>
             `
@@ -1331,9 +1389,17 @@
             else danger++;
         });
 
-        const overallPercent = totalHeld > 0 ? (totalAttended / totalHeld) * 100 : 0;
-        const overallWithout = totalHeld > 0 ? ((totalAttended - totalOdml) / totalHeld) * 100 : 0;
-        const projectedMax = (totalHeld + totalRemaining) > 0 ? ((totalAttended + totalRemaining) / (totalHeld + totalRemaining)) * 100 : 0;
+        // With OD/ML: college rule applied per subject; original: present only
+        let effNowSum = 0, effMaxSum = 0;
+        data.forEach(sub => {
+            const c = countsOf(sub), F = c.held + c.remaining;
+            effNowSum += pctPair(c.present, c.odml, c.held, F).withOd / 100 * c.held;
+            effMaxSum += pctPair(c.present + c.remaining, c.odml, F, F).withOd / 100 * F;
+        });
+        const totalPresent = totalAttended - totalOdml;
+        const overallPercent = totalHeld > 0 ? (effNowSum / totalHeld) * 100 : 0;
+        const overallWithout = totalHeld > 0 ? (totalPresent / totalHeld) * 100 : 0;
+        const projectedMax = (totalHeld + totalRemaining) > 0 ? (effMaxSum / (totalHeld + totalRemaining)) * 100 : 0;
         const overallStatus = overallPercent >= minPercent ? (overallPercent >= 85 ? 'safe' : 'info') : 'danger';
 
         return {
@@ -1347,8 +1413,12 @@
                 <p style="margin:10px 0 0;"><strong>${overallPercent.toFixed(1)}%</strong> with OD/ML · <strong>${overallWithout.toFixed(1)}%</strong> without OD/ML${totalOdml ? ` (${totalOdml} OD/ML hours)` : ''}</p>
                 <div class="si-stats-grid" style="margin-top:16px;">
                     <div class="si-stat-tile">
-                        <div class="si-stat-value">${totalAttended}/${totalHeld}</div>
-                        <div class="si-stat-label">Attended</div>
+                        <div class="si-stat-value">${totalPresent}/${totalHeld}</div>
+                        <div class="si-stat-label">Present (original)</div>
+                    </div>
+                    <div class="si-stat-tile">
+                        <div class="si-stat-value info">${totalOdml}</div>
+                        <div class="si-stat-label">OD/ML hours</div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value info">${totalRemaining}</div>
@@ -1411,8 +1481,12 @@
                         <div class="si-stat-label">Without OD/ML</div>
                     </div>
                     <div class="si-stat-tile">
-                        <div class="si-stat-value">${s.attended}/${s.totalHeld}</div>
-                        <div class="si-stat-label">Attended</div>
+                        <div class="si-stat-value">${s.attended - s.odml}/${s.totalHeld}</div>
+                        <div class="si-stat-label">Present (original)</div>
+                    </div>
+                    <div class="si-stat-tile">
+                        <div class="si-stat-value info">${s.odml}${s.allowancePlan ? `<small style="font-size:0.7em;opacity:0.7;">/${s.allowancePlan.allowance}</small>` : ''}</div>
+                        <div class="si-stat-label">OD/ML hours${s.allowancePlan ? ' (allowance)' : ''}</div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value ${s.maxSkippable > 0 ? 'safe' : 'danger'}">${s.maxSkippable}</div>
@@ -1535,6 +1609,7 @@
 
         let rows = '';
         let totalAttended = 0, totalHeld = 0, totalRemaining = 0;
+        let predEff = 0, predPresent = 0, predOd = 0;
 
         data.forEach(sub => {
             const s = analyzeSubject(sub, minCriteria);
@@ -1542,10 +1617,13 @@
             totalHeld += s.totalHeld;
             totalRemaining += s.remaining;
 
-            // Realistic projection: assume current trend continues
-            const trendRate = s.totalHeld > 0 ? s.attended / s.totalHeld : 0.75;
+            // Realistic projection: your own attendance rate continues; OD/ML counted by the college rule
+            const c = countsOf(sub);
+            const trendRate = c.held > 0 ? c.present / c.held : 0.75;
             const projectedAttend = Math.round(s.remaining * trendRate);
-            const projectedPercent = s.finalTotal > 0 ? ((s.attended + projectedAttend) / s.finalTotal) * 100 : 0;
+            const projPair = pctPair(c.present + projectedAttend, c.odml, s.finalTotal, s.finalTotal);
+            const projectedPercent = projPair.withOd;
+            predEff += projectedPercent / 100 * s.finalTotal; predPresent += c.present; predOd += c.odml;
             const status = projectedPercent >= minPercent ? (projectedPercent >= 85 ? 'safe' : 'info') : 'danger';
 
             rows += `<tr>
@@ -1556,9 +1634,8 @@
             </tr>`;
         });
 
-        const overallTrend = totalHeld > 0 ? totalAttended / totalHeld : 0.75;
-        const projectedAttendAll = Math.round(totalRemaining * overallTrend);
-        const projectedOverall = (totalHeld + totalRemaining) > 0 ? ((totalAttended + projectedAttendAll) / (totalHeld + totalRemaining)) * 100 : 0;
+        const overallTrend = totalHeld > 0 ? predPresent / totalHeld : 0.75;
+        const projectedOverall = (totalHeld + totalRemaining) > 0 ? (predEff / (totalHeld + totalRemaining)) * 100 : 0;
 
         return {
             icon: '🔮', iconClass: projectedOverall >= minPercent ? 'info' : 'danger',
@@ -1652,6 +1729,7 @@
     // INFO ANSWERS: holidays, OD/ML, exams, timetable, profile, semester, missed days
     // ============================================================
     const INFO_RULES = [
+        { handler: 'handleBestLeaveDay', re: /\b(?:best|good|safe|safest|cheapest|ideal|right|suitable)\s+(?:day|days|date|dates|time)\b.*\b(?:leave|skip|bunk|off|holiday|rest|break)\b|\bwhich\s+(?:day|days|date)\b.*\b(?:leave|skip|bunk|off|break)\b|\bwhen\s+(?:should|can|could)\s+i\s+(?:take\s+(?:a\s+)?(?:leave|day\s+off|off|break)|skip|bunk)\b|\bsuggest\w*\b.*\b(?:leave|skip|bunk|day\s+off)\b|\bday\s+to\s+(?:take\s+(?:a\s+)?)?(?:leave|skip|bunk|off)\b/i },
         { handler: 'handleProfileInfo', re: /\b(?:my\s+(?:profile|details|account|info|information|name|reg(?:istration)?(?:\s+(?:no|number))?|roll(?:\s+(?:no|number))?|college|branch|department|semester|sem|email|phone|number|class)|who\s+am\s+i|account\s+(?:info|details|information)|profile)\b/i },
         { handler: 'handleSemesterInfo', re: /\b(?:semester|sem|classes?)\s+(?:end|ends|start|starts|dates?|over|finish(?:es)?|left)\b|\b(?:last|final)\s+(?:working\s+)?day\b|\b(?:how\s+many\s+)?(?:days|weeks|class\s+days)\s+(?:are\s+)?left\b|\bwhen\s+does\s+(?:the\s+)?(?:semester|sem|classes?)\b/i },
         { handler: 'handleExamInfo', re: /\b(?:exams?|examinations?|mid\s*-?\s*terms?|mid\s*-?\s*sems?|end\s*-?\s*sems?|practical\s+exams?|test\s+dates?|compulsory\s+days?)\b/i },
@@ -1748,6 +1826,118 @@
 
     function noClassResponse() {
         return noDataResponse();
+    }
+
+    // ---------- Best day to take leave ----------
+    // Each upcoming class day: can every subject with class that day afford to miss it?
+    // Ranked by how much of the buffer it uses; days that join a weekend/holiday rank higher.
+    function rankLeaveDays(cls, data, opts = {}) {
+        const minCriteria = getMinCriteria();
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const from = opts.from || formatLocalDateSI(addDays(t, 1));
+        const to = opts.to || formatLocalDateSI(addDays(t, 14));
+        const exclude = opts.exclude || new Set();
+        const skips = {}, names = {};
+        data.forEach(sub => {
+            const c = countsOf(sub);
+            skips[sub.code] = typeof getSubjectAnalysis === 'function'
+                ? getSubjectAnalysis(c.present + c.odml, c.held, c.remaining, minCriteria, c.odml).stats.maxSkippable
+                : analyzeSubject(sub, minCriteria).maxSkippable;
+            names[sub.code] = sub.shortName || sub.name || sub.code;
+        });
+        const total = (ds) => Object.values(classesOnDate(cls, ds)).reduce((a, b) => a + b, 0);
+        const isOff = (ds) => total(ds) === 0 && !(cls.lastDate && ds > cls.lastDate);
+        const days = [];
+        for (let d = new Date(from + 'T00:00:00'); formatLocalDateSI(d) <= to; d = addDays(d, 1)) {
+            const ds = formatLocalDateSI(d);
+            if (exclude.has(ds) || (cls.lastDate && ds > cls.lastDate)) continue;
+            const counts = classesOnDate(cls, ds);
+            const n = Object.values(counts).reduce((a, b) => a + b, 0);
+            if (!n) continue;
+            const exam = typeof getExamOn === 'function' ? getExamOn(ds) : null;
+            let usage = 0, minLeft = Infinity;
+            const blockers = [];
+            Object.keys(counts).forEach(code => {
+                if (skips[code] === undefined) return;
+                const left = skips[code] - counts[code];
+                minLeft = Math.min(minLeft, left);
+                usage += counts[code] / Math.max(1, skips[code]);
+                if (left < 0) blockers.push(`${names[code]} (short ${-left})`);
+            });
+            // Days off you'd get in a row by taking this day
+            let len = 1;
+            for (let k = 1; k <= 4 && isOff(formatLocalDateSI(addDays(d, -k))); k++) len++;
+            for (let k = 1; k <= 4 && isOff(formatLocalDateSI(addDays(d, k))); k++) len++;
+            const subjects = Object.keys(counts).map(code => `${names[code] || code}${counts[code] > 1 ? ` ×${counts[code]}` : ''}`);
+            days.push({ date: ds, classes: n, subjects, exam, blockers, minLeft: minLeft === Infinity ? 0 : minLeft, usage, len, safe: !exam && !blockers.length });
+        }
+        const score = (x) => x.usage + x.classes * 0.05 - (x.len - 1) * 0.35;
+        const ranked = days.filter(x => x.safe).sort((a, b) => score(a) - score(b));
+        return { days, ranked };
+    }
+
+    function dayReason(x) {
+        const parts = [`${x.classes} class${x.classes !== 1 ? 'es' : ''}: ${escapeHtml(x.subjects.join(', '))}`];
+        if (x.len > 1) parts.push(`gives you <strong>${x.len} days off in a row</strong>`);
+        parts.push(x.minLeft > 0 ? `every subject keeps at least ${x.minLeft} more skip${x.minLeft !== 1 ? 's' : ''}` : 'uses the last skip of a subject');
+        return parts.join(' · ');
+    }
+
+    // Short "safer days" suggestion for a risky leave answer
+    function betterDaysHtml(cls, data, exclude) {
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const { ranked } = rankLeaveDays(cls, data, { exclude, to: formatLocalDateSI(addDays(t, 21)) });
+        if (!ranked.length) return '<p style="margin-top:10px;"><strong>No safe single day in the next 3 weeks.</strong> Attend regularly for now to build a buffer.</p>';
+        return `<div class="si-notes" style="margin-top:12px;"><p><strong>💡 Safer days to take off instead</strong></p>${ranked.slice(0, 2).map(x => `<p><strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`;
+    }
+
+    function handleBestLeaveDay(query) {
+        const data = getAttendanceData();
+        const cls = getSelectedClassObj();
+        if (!data.length || !cls) return noDataResponse();
+        const minPercent = getMinCriteria() * 100;
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const parsed = parseDateQuery(query, cls);
+        let from, to, scope;
+        if (parsed && parsed.dates.length > 1) {
+            from = parsed.dates[0] > formatLocalDateSI(t) ? parsed.dates[0] : formatLocalDateSI(addDays(t, 1));
+            to = parsed.dates[parsed.dates.length - 1];
+            scope = describeRanges(parsed.ranges);
+        } else {
+            from = formatLocalDateSI(addDays(t, 1));
+            to = formatLocalDateSI(addDays(t, 14));
+            scope = 'the next 2 weeks';
+        }
+        const { days, ranked } = rankLeaveDays(cls, data, { from, to });
+        const best = ranked[0];
+
+        // Which weekday is usually lightest
+        const byDow = {};
+        days.forEach(x => { const w = new Date(x.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long' }); (byDow[w] = byDow[w] || []).push(x.classes); });
+        const lightest = Object.entries(byDow).map(([w, arr]) => [w, arr.reduce((a, b) => a + b, 0) / arr.length]).sort((a, b) => a[1] - b[1])[0];
+
+        const rows = days.slice(0, 14).map(x => `<tr>
+            <td><strong>${fmtShort(x.date)}</strong>${x.len > 1 && x.safe ? `<br><small style="opacity:0.7;">${x.len}-day break</small>` : ''}</td>
+            <td style="text-align:center;">${x.classes}</td>
+            <td>${x.exam ? `<span class="si-badge danger">📝 ${escapeHtml(x.exam.title)}</span>`
+                : x.safe ? `<span class="si-badge ${x.minLeft <= 1 ? 'warning' : 'safe'}">✅ Safe</span>`
+                    : `<span class="si-badge danger">❌ ${escapeHtml(x.blockers.join(', '))}</span>`}</td>
+        </tr>`).join('');
+
+        return {
+            icon: best ? '🗓️' : '⚠️', iconClass: best ? 'safe' : 'warning',
+            title: best ? `Best day to take leave: ${fmtShort(best.date)}` : `No safe day to take off in ${scope}`,
+            body: `
+                ${best ? `<div class="si-notes"><p><strong>💡 Top picks for ${escapeHtml(scope)}</strong></p>
+                    ${ranked.slice(0, 3).map((x, i) => `<p>${['🥇', '🥈', '🥉'][i]} <strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`
+                    : `<p>Every class day in ${escapeHtml(scope)} would put at least one subject below ${minPercent}% (or is an exam). Attend for now; your buffer grows with each class.</p>`}
+                ${lightest ? `<p style="margin-top:10px;">Lightest weekday: <strong>${lightest[0]}</strong> (about ${lightest[1].toFixed(1)} classes).</p>` : ''}
+                <table class="si-subject-table" style="margin-top:12px;">
+                    <thead><tr><th>Day</th><th>Classes</th><th>Taking it off</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <p style="font-size:0.78rem;margin-top:8px;opacity:0.75;">"Safe" = every subject with class that day can still finish at ${minPercent}% (your OD/ML rule included). Exam days are never suggested.</p>`
+        };
     }
 
     // ---------- Holidays ----------
@@ -2055,7 +2245,7 @@
         // Questions about your data: holidays, OD/ML, exams, timetable, profile, semester, missed days
         const info = infoHandlerFor(query, parsed);
         if (info) {
-            const fn = { handleProfileInfo, handleSemesterInfo, handleExamInfo, handleOdmlInfo, handleMissedDays, handleHolidayInfo, handleTimetableInfo }[info];
+            const fn = { handleBestLeaveDay, handleProfileInfo, handleSemesterInfo, handleExamInfo, handleOdmlInfo, handleMissedDays, handleHolidayInfo, handleTimetableInfo }[info];
             const r = fn(query);
             if (r) return r;
         }
