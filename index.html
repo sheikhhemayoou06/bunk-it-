@@ -6345,6 +6345,7 @@
     <link rel="stylesheet" href="css/profile-page.css?v=6">
     <link rel="stylesheet" href="css/subjects-page.css?v=3">
     <link rel="stylesheet" href="css/day-check.css?v=7">
+    <link rel="stylesheet" href="css/onboarding.css?v=1">
 </head>
 
 <body>
@@ -9080,14 +9081,13 @@
                     // Check if user has a profile name, if not show name prompt first
                     const profileName = localStorage.getItem('userProfileName');
                     if (!profileName) {
-                        // Show name prompt - the saveFirstLoginName function will handle import after
-                        console.log("📥 No profile name. Showing name prompt first...");
-                        if (typeof createProfileModals === 'function') createProfileModals();
-                        setTimeout(() => {
-                            if (document.getElementById('firstLoginPromptModal')) {
-                                openModal('firstLoginPromptModal');
-                            }
-                        }, 500);
+                        // Ask the name on the onboarding screen, then import
+                        console.log("📥 No profile name. Showing name step first...");
+                        if (window.Onboarding) { setTimeout(() => Onboarding.start({ step: 'name', pendingImport }), 500); }
+                        else {
+                            if (typeof createProfileModals === 'function') createProfileModals();
+                            setTimeout(() => { if (document.getElementById('firstLoginPromptModal')) openModal('firstLoginPromptModal'); }, 500);
+                        }
                     } else {
                         // User has name, import directly
                         setTimeout(() => importClassFromURL(pendingImport), 500);
@@ -9097,7 +9097,7 @@
 
                 // PRIORITY 2: DATA CHECK (Guest -> Signup conversion or existing data)
                 // If user has ANY classes (local or synced), we assume they are already onboarded.
-                const hasClasses = selectedClass || (window.classes && Object.keys(window.classes).length > 0);
+                const hasClasses = selectedClass || (typeof classes !== 'undefined' && Object.keys(classes).length > 0);
                 if (hasClasses) {
                     // console.log("✅ User has data. Skipping onboarding.");
                     return;
@@ -9155,19 +9155,17 @@
                     // Consolidate name
                     const existingName = guestName || profileName || authName;
 
-                    if (!existingName) {
+                    // New animated onboarding (name if unknown, then set up the class)
+                    if (window.Onboarding) Onboarding.start({ step: existingName ? 'class' : 'name' });
+                    else if (!existingName) {
                         createProfileModals();
-                        const firstLoginInput = document.getElementById('firstLoginNameInput');
-                        if (firstLoginInput) firstLoginInput.value = '';
                         openModal('firstLoginPromptModal');
-                    } else {
-                        // If name exists (e.g. from Google Login implicit?), go to Class Setup
-                        openOnboardingClassModal();
-                    }
+                    } else openOnboardingClassModal();
                 }, 500);
             }
 
             function openOnboardingClassModal() {
+                if (window.Onboarding) { Onboarding.start({ step: 'class' }); return; }
                 createOnboardingClassModal();
                 openModal('onboardingClassModal');
                 // Bot will appear 3s after user clicks Example/Add Class buttons
@@ -26411,17 +26409,11 @@ Answer helpfully using this context.`;
                         // EXCEPTION: If user came via link AND doesn't have name, show name prompt
                         if (pendingImport && !profileName) {
                             console.log('📥 Link import detected + No name. Showing name prompt...');
-                            if (typeof createProfileModals === 'function') createProfileModals();
-                            setTimeout(() => {
-                                if (document.getElementById('firstLoginPromptModal')) {
-                                    openModal('firstLoginPromptModal');
-                                    // Pre-fill name if available from Google
-                                    if (user?.user_metadata?.full_name) {
-                                        const input = document.getElementById('firstLoginNameInput');
-                                        if (input) input.value = user.user_metadata.full_name;
-                                    }
-                                }
-                            }, 500);
+                            if (window.Onboarding) { setTimeout(() => Onboarding.start({ step: 'name', pendingImport, askName: true }), 500); }
+                            else {
+                                if (typeof createProfileModals === 'function') createProfileModals();
+                                setTimeout(() => { if (document.getElementById('firstLoginPromptModal')) openModal('firstLoginPromptModal'); }, 500);
+                            }
                             return;
                         }
 
@@ -27105,6 +27097,7 @@ Answer helpfully using this context.`;
                 <script src="js/notification-center.js?v=5"></script>
                 <script src="js/profile-tools.js?v=4"></script>
                 <script src="js/attendance-calendar.js?v=3"></script>
+                <script src="js/onboarding.js?v=1"></script>
                 <!-- Toast Container -->
                 <div id="toast-container"></div>
 
