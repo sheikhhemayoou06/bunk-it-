@@ -108,6 +108,114 @@
     }
 
     // --- Weekly grid ---
+    // ---------- Class timings ----------
+    function periodTimesFor() {
+        const name = className();
+        return (name && typeof getPeriodTimes === 'function' && getPeriodTimes(name)) || {};
+    }
+
+    function periodCount() {
+        const name = className();
+        const week = weeklyArrangement(getTimetableArrangement(name, today()));
+        let max = 0;
+        for (let d = 0; d < 7; d++) max = Math.max(max, (week[d] || []).length);
+        const times = periodTimesFor();
+        Object.keys(times).forEach(k => { if (times[k] && (times[k].start || times[k].end)) max = Math.max(max, +k + 1); });
+        return Math.max(max, 1);
+    }
+
+    function timingsCard() {
+        const times = periodTimesFor();
+        const n = periodCount();
+        const set = Object.values(times).filter(t => t && t.start && t.end).length;
+        let rows = '';
+        for (let i = 0; i < n; i++) {
+            const t = times[i] || {};
+            rows += `
+                <div class="tm-time-row">
+                    <span class="tm-time-p">P${i + 1}</span>
+                    <input type="time" id="tmStart_${i}" value="${esc(t.start || '')}" aria-label="Period ${i + 1} start">
+                    <span class="tm-time-sep">–</span>
+                    <input type="time" id="tmEnd_${i}" value="${esc(t.end || '')}" aria-label="Period ${i + 1} end">
+                </div>`;
+        }
+        return `
+            <section class="tm-card" id="tmTimingsCard">
+                <div class="tm-card-head">
+                    <div>
+                        <h2><i class="fa-regular fa-clock"></i> Class timings</h2>
+                        <p>${set ? `${set} of ${n} periods have times.` : 'Add a start and end time for each period.'} After each class ends you'll get a reminder to mark it, and it leaves Home's timetable.</p>
+                    </div>
+                </div>
+                <div class="tm-autofill">
+                    <label><span>First class</span><input type="time" id="tmAfStart" value="${esc((times[0] && times[0].start) || '09:00')}"></label>
+                    <label><span>Class length</span><select id="tmAfLen">${[40, 45, 50, 55, 60, 90].map(m => `<option value="${m}" ${m === 50 ? 'selected' : ''}>${m} min</option>`).join('')}</select></label>
+                    <label><span>Gap</span><select id="tmAfGap">${[0, 5, 10, 15].map(m => `<option value="${m}" ${m === 0 ? 'selected' : ''}>${m} min</option>`).join('')}</select></label>
+                    <button class="tm-btn" onclick="TimetableModes.autofillTimes(${n})"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-fill</button>
+                </div>
+                <div class="tm-times">${rows}</div>
+                <p class="tm-time-msg" id="tmTimeMsg" role="status"></p>
+                <div class="tm-day-actions">
+                    <button class="tm-btn" onclick="TimetableModes.clearTimes()"><i class="fa-solid fa-rotate-left"></i> Clear</button>
+                    <button class="tm-btn tm-btn-primary" onclick="TimetableModes.saveTimes(${n})"><i class="fa-solid fa-floppy-disk"></i> Save timings</button>
+                </div>
+            </section>`;
+    }
+
+    const hm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+    const mins = (t) => (/^\d{1,2}:\d{2}$/.test(t || '') ? t.split(':').map(Number).reduce((h, m) => h * 60 + m) : null);
+
+    function autofillTimes(n) {
+        const start = mins(document.getElementById('tmAfStart')?.value);
+        const len = +document.getElementById('tmAfLen')?.value || 50;
+        const gap = +document.getElementById('tmAfGap')?.value || 0;
+        if (start === null) return;
+        for (let i = 0; i < n; i++) {
+            const s0 = start + i * (len + gap);
+            const a = document.getElementById(`tmStart_${i}`), b = document.getElementById(`tmEnd_${i}`);
+            if (a) a.value = hm(s0);
+            if (b) b.value = hm(s0 + len);
+        }
+        const msg = document.getElementById('tmTimeMsg');
+        if (msg) { msg.textContent = 'Filled in — adjust any period (e.g. lunch), then Save.'; msg.className = 'tm-time-msg'; }
+    }
+
+    function saveTimes(n) {
+        const name = className();
+        if (!name) return;
+        const out = {};
+        let prevEnd = null;
+        for (let i = 0; i < n; i++) {
+            const a = document.getElementById(`tmStart_${i}`)?.value || '';
+            const b = document.getElementById(`tmEnd_${i}`)?.value || '';
+            const msg = document.getElementById('tmTimeMsg');
+            const fail = (t) => { if (msg) { msg.textContent = t; msg.className = 'tm-time-msg err'; } };
+            if (!a && !b) continue;
+            if (!a || !b) return fail(`Period ${i + 1}: add both a start and an end time.`);
+            if (mins(b) <= mins(a)) return fail(`Period ${i + 1}: the end time must be after the start.`);
+            if (prevEnd !== null && mins(a) < prevEnd) return fail(`Period ${i + 1} starts before period ${i} ends.`);
+            prevEnd = mins(b);
+            out[i] = { start: a, end: b };
+        }
+        if (typeof savePeriodTimes === 'function') savePeriodTimes(name, out);
+        if (typeof renderTodayTimetable === 'function') { try { renderTodayTimetable(); } catch (e) { /* ignore */ } }
+        if (window.ClassReminders) ClassReminders.tick();
+        if (typeof showToast === 'function') showToast('Class timings saved', `${Object.keys(out).length} period${Object.keys(out).length !== 1 ? 's' : ''} · reminders after each class`, { duration: 2500 });
+        render();
+    }
+
+    function clearTimes() {
+        const name = className();
+        if (!name || !confirm('Clear all class timings?')) return;
+        if (typeof savePeriodTimes === 'function') savePeriodTimes(name, {});
+        render();
+    }
+
+    function focusTimings() {
+        const el = document.getElementById('tmTimingsCard');
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('tm-flash'); setTimeout(() => el.classList.remove('tm-flash'), 1600); }
+    }
+
     function renderWeekGrid(arrangement) {
         const week = weeklyArrangement(arrangement);
         const days = [0, 1, 2, 3, 4, 5, 6].filter(d => week[d].some(Boolean));
@@ -118,7 +226,8 @@
         let head = '<tr><th>Period</th>' + days.map(d => `<th>${DAY_NAMES[d]}</th>`).join('') + '</tr>';
         let body = '';
         for (let p = 0; p < maxP; p++) {
-            body += `<tr><td class="tm-pnum">${p + 1}</td>` + days.map(d => {
+            const pt = periodTimesFor()[p];
+            body += `<tr><td class="tm-pnum">${p + 1}${pt && pt.start ? `<small class="tm-ptime">${pt.start}</small>` : ''}</td>` + days.map(d => {
                 const code = week[d][p];
                 if (!code) return '<td><span class="tm-free">—</span></td>';
                 const color = subjectColor(code);
@@ -427,7 +536,7 @@
         if (label) {
             label.innerHTML = `${esc(name)} <span class="tm-mode-badge"><i class="fa-solid ${chosen === 'monthly' ? 'fa-calendar-days' : chosen === 'daily' ? 'fa-sun' : 'fa-lock'}"></i> ${MODE_LABELS[chosen]}</span>`;
         }
-        content.innerHTML = chosen === 'monthly' ? renderMonthly() : chosen === 'daily' ? renderDaily() : renderFixed();
+        content.innerHTML = (chosen === 'monthly' ? renderMonthly() : chosen === 'daily' ? renderDaily() : renderFixed()) + timingsCard();
     }
 
     function setMode(mode) {
@@ -546,6 +655,7 @@
     }
 
     window.TimetableModes = {
+        autofillTimes, saveTimes, clearTimes, focusTimings,
         render, setMode, open, editTimetable, noChanges, viewVersion, openModeEditor, pick, saveEditor,
         pickDay, setPeriod, addPeriod, removePeriod, copyUsual, saveDay, clearDay
     };

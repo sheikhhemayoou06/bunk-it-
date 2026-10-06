@@ -1082,3 +1082,83 @@ body.dark-mode .pt-warn {
     .pf-sheet { max-width: none; border-radius: 22px 22px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateY(100%); }
     .pf-sheet-grip { display: block; }
 }
+
+/* ============================================================
+   Instagram-style profile: header, stats, highlights, sub-pages, ⋯ menu
+   ============================================================ */
+.pf-mainview, .pf-subpage { animation: pfIn 0.28s cubic-bezier(.2,.8,.2,1) both; }
+.pf-subpage { animation-name: pfSlide; }
+@keyframes pfIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pfSlide { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+
+.pf-ig-top, .pf-sub-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.pf-ig-top h1 { flex: 1; margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.2px; color: var(--pf-text); }
+.pf-sub-top h1 { flex: 1; margin: 0; text-align: center; font-size: 1.08rem; font-weight: 700; color: var(--pf-text); }
+.pf-verified { color: #0095f6; font-size: 0.9rem; }
+.pf-dots { width: 40px; height: 40px; flex-shrink: 0; border: none; border-radius: 50%; background: transparent; color: var(--pf-text); font-size: 1.15rem; cursor: pointer; }
+.pf-dots:hover { background: var(--pf-surface); }
+.pf-dots-ph { width: 40px; flex-shrink: 0; }
+
+.pf-ig-head { display: flex; align-items: center; gap: 20px; }
+.pf-ig-avatar { position: relative; width: 86px; height: 86px; flex-shrink: 0; border-radius: 50%; padding: 3px;
+    background: var(--pf-border); }
+.pf-ig-avatar.ring { background: linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7); }
+.pf-ig-avatar span { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #6366f1, #3b82f6); border: 3px solid var(--pf-bg); box-sizing: border-box; }
+.pf-ig-stats { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+.pf-ig-stats strong { display: block; font-size: 1.15rem; font-weight: 700; color: var(--pf-text); }
+.pf-ig-stats span { font-size: 0.8rem; color: var(--pf-muted); }
+
+.pf-ig-bio { display: flex; flex-direction: column; gap: 1px; margin-top: 12px; font-size: 0.9rem; color: var(--pf-text); }
+.pf-ig-bio strong { font-size: 0.98rem; }
+.pf-ig-bio span { line-height: 1.4; }
+.pf-ig-class { color: #4f46e5; font-weight: 600; }
+.pf-ig-sub { color: var(--pf-muted); font-size: 0.82rem; }
+
+.pf-ig-btns { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-top: 14px; }
+.pf-ig-btn { min-height: 36px; padding: 0 14px; border: none; border-radius: 10px; background: var(--pf-border); color: var(--pf-text);
+    font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+.pf-ig-btn:hover { filter: brightness(0.96); }
+.pf-ig-icon { width: 40px; padding: 0; }
+.pf-ig-primary { background: #0095f6; color: #fff; }
+
+.pf-ig-complete { position: relative; display: flex; justify-content: space-between; width: 100%; margin-top: 12px; padding: 10px 14px 14px;
+    border: 1px solid var(--pf-border); border-radius: 12px; background: var(--pf-surface); color: var(--pf-text); font-family: inherit; font-size: 0.85rem; cursor: pointer; overflow: hidden; }
+.pf-ig-complete b { color: #4f46e5; }
+.pf-ig-complete i { position: absolute; left: 0; bottom: 0; height: 4px; width: var(--w); background: linear-gradient(90deg, #6366f1, #22c55e); }
+
+.pf-hls { display: flex; gap: 16px; margin: 16px -4px 4px; padding: 0 4px 4px; overflow-x: auto; scrollbar-width: none; }
+.pf-hls::-webkit-scrollbar { display: none; }
+.pf-hl { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; border: none; background: none;
+    color: var(--pf-text); font-family: inherit; font-size: 0.75rem; cursor: pointer; }
+.pf-hl-ring { width: 64px; height: 64px; border-radius: 50%; padding: 2px; background: var(--pf-border); }
+.pf-hl-in { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--pf-surface); border: 3px solid var(--pf-bg); box-sizing: border-box; color: #4f46e5; font-size: 1.15rem; }
+.pf-hl:active .pf-hl-ring { transform: scale(0.94); }
+
+.pf-static { cursor: default; }
+.pf-static:hover { background: transparent; }
+.pf-info-value.muted { color: var(--pf-muted); font-weight: 400; }
+.pf-page-note { margin: 10px 4px 0; font-size: 0.8rem; color: var(--pf-muted); }
+.pf-sub-body { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
+.pf-empty-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 18px; text-align: center; color: var(--pf-muted); }
+.pf-empty-card > i { font-size: 1.8rem; color: #4f46e5; margin-bottom: 4px; }
+.pf-empty-card strong { color: var(--pf-text); }
+.pf-empty-btns { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ⋯ action menu (bottom sheet, like Instagram) */
+.pf-menu { padding: 10px 0 calc(8px + env(safe-area-inset-bottom)); max-width: 420px; }
+.pf-menu .pf-sheet-grip { margin: 0 auto 8px; display: block; }
+.pf-menu-item { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 22px; border: none; background: none;
+    color: var(--pf-text); font-family: inherit; font-size: 0.98rem; text-align: left; cursor: pointer; }
+.pf-menu-item i { width: 20px; text-align: center; color: var(--pf-muted); }
+.pf-menu-item:hover { background: var(--pf-bg); }
+.pf-menu-item.danger, .pf-menu-item.danger i { color: #ed4956; }
+.pf-menu-cancel { justify-content: center; margin-top: 4px; border-top: 1px solid var(--pf-border); font-weight: 600; }
+
+@media (max-width: 400px) {
+    .pf-ig-head { gap: 14px; }
+    .pf-ig-avatar { width: 76px; height: 76px; }
+    .pf-ig-stats strong { font-size: 1.02rem; }
+    .pf-ig-stats span { font-size: 0.72rem; }
+}

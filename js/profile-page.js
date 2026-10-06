@@ -120,205 +120,305 @@
         return { done, total: keys.length + 1 };
     }
 
-    function accountCard() {
-        const user = window.AuthManager?.user;
-        const name = displayName() || (user ? user.email.split('@')[0] : 'Guest');
-        const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'G';
-        const { done, total } = profileCompletion();
-        const pct = Math.round(done / total * 100);
+    // ============================================================
+    // Instagram-style layout: main view + detail pages with a ⋯ menu
+    // ============================================================
+    let view = 'main';
 
-        return `
-            <section class="pf-card pf-hero">
-                <div class="pf-hero-avatar">${esc(initials)}</div>
-                <h2 class="pf-hero-name">${esc(name)}</h2>
-                <p class="pf-hero-sub">${user ? esc(user.email) : 'Guest · data saved on this device only'}</p>
-                <span class="pf-status ${user ? 'ok' : 'guest'}">
-                    <i class="fa-solid ${user ? 'fa-circle-check' : 'fa-mobile-screen'}"></i> ${user ? 'Signed in · synced to cloud' : 'Not signed in'}
-                </span>
-                ${pct < 100 ? `
-                <div class="pf-complete">
-                    <div class="pf-complete-head"><span>Profile ${pct}% complete</span><span>${done}/${total}</span></div>
-                    <div class="pf-complete-bar"><i style="width:${pct}%"></i></div>
-                </div>` : ''}
-                <div class="pf-hero-actions">
-                    ${user
-                        ? `<button class="pf-btn" onclick="ProfilePage.syncNow(this)"><i class="fa-solid fa-rotate"></i> Sync now</button>`
-                        : `<button class="pf-btn pf-btn-primary" onclick="ProfilePage.signIn()"><i class="fa-solid fa-right-to-bracket"></i> Sign in to sync</button>`}
-                </div>
-            </section>`;
+    function overallStats() {
+        let data = [];
+        try {
+            if (typeof currentAnalysisData !== 'undefined' && currentAnalysisData.length) data = currentAnalysisData;
+            else if (window.SmartSearch?.computeClassAttendance) data = SmartSearch.computeClassAttendance() || [];
+        } catch (e) { data = []; }
+        let held = 0, eff = 0, skip = 0;
+        data.forEach(sub => {
+            try {
+                const sp = attendanceSplit(sub.attended, sub.totalHeld, sub.odml, sub.remaining);
+                const st = getSubjectAnalysis(sub.attended, sub.totalHeld, sub.remaining, null, sub.odml).stats;
+                held += sp.totalHeld; eff += sp.withPct / 100 * sp.totalHeld;
+                if (sp.totalHeld) skip += Math.max(0, st.maxSkippable);
+            } catch (e) { /* ignore */ }
+        });
+        return { pct: held ? eff / held * 100 : null, subjects: data.length, skip };
     }
 
-    // One "label / value" row that opens the editor
-    function infoRow(key) {
+    // A read-only "label / value" line (editing lives in the ⋯ menu)
+    function infoLine(icon, label, value, empty = 'Not added') {
+        return `
+            <div class="pf-info-row pf-static">
+                <span class="pf-info-icon"><i class="fa-solid ${icon}"></i></span>
+                <span class="pf-info-text">
+                    <span class="pf-info-label">${label}</span>
+                    <span class="pf-info-value ${value ? '' : 'muted'}">${value ? esc(value) : empty}</span>
+                </span>
+            </div>`;
+    }
+    function fieldLine(key) {
         const f = FIELDS[key];
         const raw = key === 'name' ? displayName() : getProfile()[key];
-        const shown = raw ? (f.show ? f.show(raw) : raw) : '';
-        return `
-            <button type="button" class="pf-info-row" onclick="ProfilePage.editField('${key}')">
-                <span class="pf-info-icon"><i class="fa-solid ${f.icon}"></i></span>
-                <span class="pf-info-text">
-                    <span class="pf-info-label">${f.label}</span>
-                    <span class="pf-info-value ${shown ? '' : 'empty'}">${shown ? esc(shown) : 'Add'}</span>
-                </span>
-                <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
-            </button>`;
+        return infoLine(f.icon, f.label, raw ? (f.show ? f.show(raw) : raw) : '');
     }
 
-    function detailsCard() {
-        return `
-            <section class="pf-group" id="pfDetails">
-                <h3 class="pf-group-label">Personal info</h3>
-                <div class="pf-card pf-list">${['name', 'phone'].map(infoRow).join('')}</div>
-            </section>
-            <section class="pf-group">
-                <h3 class="pf-group-label">Academic details</h3>
-                <div class="pf-card pf-list">${['regNo', 'college', 'branch', 'semester'].map(infoRow).join('')}</div>
-            </section>`;
+    // Menu entries on the main page → detail pages
+    function navRow(id, icon, tone, title, desc) {
+        return `<button type="button" class="pf-row" onclick="ProfilePage.go('${id}')">
+            <span class="pf-row-icon pf-tone-${tone}"><i class="fa-solid ${icon}"></i></span>
+            <span class="pf-row-text"><span class="pf-row-title">${title}</span>${desc ? `<span class="pf-row-desc">${desc}</span>` : ''}</span>
+            <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
+        </button>`;
     }
 
-    function securityCard() {
+    function renderMain() {
         const user = window.AuthManager?.user;
-        if (!user) {
-            return `
-                <section class="pf-group">
-                    <h3 class="pf-group-label">Login & security</h3>
-                    <div class="pf-card pf-security-guest">
-                        <i class="fa-solid fa-lock"></i>
-                        <div>
-                            <strong>No account yet</strong>
-                            <span>Create an account to add an email and password, and back up your data.</span>
-                        </div>
-                        <button class="pf-btn pf-btn-primary" onclick="ProfilePage.signIn()">Create account</button>
-                    </div>
-                </section>`;
-        }
-        const google = (user.app_metadata?.providers || [user.app_metadata?.provider]).includes('google');
+        const name = displayName() || (user ? user.email.split('@')[0] : 'Guest');
+        const p = getProfile();
+        const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'G';
+        const handle = (displayName() || (user ? user.email.split('@')[0] : '') || p.regNo || 'student').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'student';
+        const st = overallStats();
+        const cls = currentClassName();
+        const bio = [p.branch, p.semester ? `Semester ${p.semester}` : '', p.college].filter(Boolean).join(' · ');
+        const { done, total } = profileCompletion();
+        const hl = (icon, label, action) => `<button type="button" class="pf-hl" onclick="${action}"><span class="pf-hl-ring"><span class="pf-hl-in"><i class="fa-solid ${icon}"></i></span></span><span>${label}</span></button>`;
+
         return `
-            <section class="pf-group">
-                <h3 class="pf-group-label">Login & security</h3>
-                <div class="pf-card pf-list">
-                    <button type="button" class="pf-info-row" onclick="ProfilePage.editEmail()">
-                        <span class="pf-info-icon"><i class="fa-solid fa-envelope"></i></span>
-                        <span class="pf-info-text">
-                            <span class="pf-info-label">Email</span>
-                            <span class="pf-info-value">${esc(user.email)}${user.email_confirmed_at ? ' <i class="fa-solid fa-circle-check pf-verified" title="Verified"></i>' : ''}</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
-                    </button>
-                    <button type="button" class="pf-info-row" onclick="ProfilePage.editPassword()">
-                        <span class="pf-info-icon"><i class="fa-solid fa-key"></i></span>
-                        <span class="pf-info-text">
-                            <span class="pf-info-label">Password</span>
-                            <span class="pf-info-value">${google ? 'Set a password to also sign in with email' : '••••••••'}</span>
-                        </span>
-                        <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
-                    </button>
-                </div>
-            </section>`;
-    }
-
-    function classCard() {
-        const name = currentClassName();
-        if (!name) {
-            return `
-                <section class="pf-card pf-class pf-class-empty">
-                    <div class="pf-class-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-                    <div class="pf-class-text">
-                        <h3>No class yet</h3>
-                        <p>Add your class, or scan a classmate's class QR code to import it.</p>
-                    </div>
-                    <div class="pf-class-actions">
-                        <button class="pf-btn pf-btn-primary" onclick="ProfilePage.run('openAddClassModal')"><i class="fa-solid fa-plus"></i> Add class</button>
-                        <button class="pf-btn" onclick="ProfilePage.run('openQRScanner')"><i class="fa-solid fa-camera"></i> Scan QR</button>
-                    </div>
-                </section>`;
-        }
-        const cls = classes[name];
-        const mode = cls.timetableMode;
-        const modeLabel = mode && window.TT_MODE_LABELS ? TT_MODE_LABELS[mode] : 'Timetable mode not set';
-        const dates = [cls.portalSetup?.semesterStartDate ? fmtDate(cls.portalSetup.semesterStartDate) : null, cls.lastDate ? fmtDate(cls.lastDate) : null];
-        return `
-            <section class="pf-card pf-class">
-                <div class="pf-class-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-                <div class="pf-class-text">
-                    <span class="pf-overline">Current class</span>
-                    <h3>${esc(name)}</h3>
-                    <p>${(cls.subjects || []).length} subjects${dates[1] ? ` · ${dates[0] ? `${dates[0]} – ` : 'until '}${dates[1]}` : ''}</p>
-                    <span class="pf-chip"><i class="fa-solid fa-calendar-week"></i> ${esc(modeLabel)}</span>
-                </div>
-                <div class="pf-quick">
-                    <button onclick="ProfilePage.run('editSelectedClass')"><i class="fa-solid fa-pen-to-square"></i><span>Edit</span></button>
-                    <button onclick="ProfilePage.run('openTimetablePage')"><i class="fa-solid fa-table-cells"></i><span>Timetable</span></button>
-                    <button onclick="ProfilePage.run('openClassQR')"><i class="fa-solid fa-qrcode"></i><span>Class QR</span></button>
-                    <button onclick="ProfilePage.run('openQRScanner')"><i class="fa-solid fa-camera"></i><span>Scan QR</span></button>
-                </div>
-            </section>`;
-    }
-
-    function render() {
-        const root = document.getElementById('profileRoot');
-        if (!root) return;
-        const user = window.AuthManager?.user;
-        const hasClass = !!currentClassName();
-        const mode = hasClass ? classes[currentClassName()].timetableMode : null;
-        const hasKey = !!localStorage.getItem('personalGeminiKey');
-
-        const classRows = hasClass ? [
-            row({ icon: 'fa-pen-to-square', tone: 'amber', title: 'Edit class', desc: 'Subjects, dates, holidays and timetable', action: "ProfilePage.run('editSelectedClass')" }),
-            row({ icon: 'fa-calendar-week', tone: 'violet', title: 'Timetable mode', desc: mode && window.TT_MODE_LABELS ? TT_MODE_LABELS[mode] : 'Choose how your timetable works', action: "ProfilePage.run('TimetableModes.openModeEditor')" }),
-            row({ icon: 'fa-graduation-cap', tone: 'green', title: 'Portal settings', desc: 'Baseline attendance and semester start', action: "ProfilePage.run('openPortalSetup')" }),
-            row({ icon: 'fa-trash-can', tone: 'red', title: 'Delete class', desc: 'Remove this class and its attendance', action: "ProfilePage.run('deleteSelectedClass')", danger: true })
-        ] : [
-            row({ icon: 'fa-plus', tone: 'indigo', title: 'Add class', desc: 'Set up subjects, dates and timetable', action: "ProfilePage.run('openAddClassModal')" })
-        ];
-
-        const darkToggle = `<span class="pf-switch ${isDark() ? 'on' : ''}" role="switch" aria-checked="${isDark()}"><span></span></span>`;
-
-        root.innerHTML = `
-            <header class="pf-header">
-                <h1>Profile & Settings</h1>
-                <p>Manage your account, class and preferences</p>
+            <header class="pf-ig-top">
+                <h1>${esc(handle)}${user ? ' <i class="fa-solid fa-circle-check pf-verified" title="Signed in"></i>' : ''}</h1>
+                <button class="pf-dots" onclick="ProfilePage.menu('main')" aria-label="More options"><i class="fa-solid fa-ellipsis"></i></button>
             </header>
 
-            ${accountCard()}
-            ${detailsCard()}
-            ${securityCard()}
-            ${classCard()}
+            <section class="pf-ig-head">
+                <div class="pf-ig-avatar ${user ? 'ring' : ''}"><span>${esc(initials)}</span></div>
+                <div class="pf-ig-stats">
+                    <div><strong>${st.pct === null ? '—' : st.pct.toFixed(1) + '%'}</strong><span>Attendance</span></div>
+                    <div><strong>${st.subjects}</strong><span>Subjects</span></div>
+                    <div><strong>${st.pct === null ? '—' : st.skip}</strong><span>Can skip</span></div>
+                </div>
+            </section>
+            <section class="pf-ig-bio">
+                <strong>${esc(name)}</strong>
+                ${p.regNo ? `<span>${esc(p.regNo)}</span>` : ''}
+                ${bio ? `<span>${esc(bio)}</span>` : ''}
+                ${cls ? `<span class="pf-ig-class"><i class="fa-solid fa-graduation-cap"></i> ${esc(cls)}</span>` : ''}
+                <span class="pf-ig-sub">${user ? esc(user.email) : 'Guest · data saved on this device'}</span>
+            </section>
+            <div class="pf-ig-btns">
+                <button class="pf-ig-btn" onclick="ProfilePage.go('personal')">Edit profile</button>
+                <button class="pf-ig-btn" onclick="${cls ? "ProfilePage.run('openClassQR')" : "ProfilePage.run('openAddClassModal')"}">${cls ? 'Share class' : 'Add class'}</button>
+                ${user ? `<button class="pf-ig-btn pf-ig-icon" onclick="ProfilePage.syncNow(this)" aria-label="Sync now"><i class="fa-solid fa-rotate"></i></button>`
+                       : `<button class="pf-ig-btn pf-ig-primary" onclick="ProfilePage.signIn()">Sign in</button>`}
+            </div>
+            ${done < total ? `<button class="pf-ig-complete" onclick="ProfilePage.go('personal')"><span>Complete your profile</span><b>${done}/${total}</b><i style="--w:${Math.round(done / total * 100)}%"></i></button>` : ''}
 
-            ${group('Class', classRows)}
+            <div class="pf-hls">
+                ${hl('fa-table-cells', 'Timetable', "ProfilePage.run('openTimetablePage')")}
+                ${cls ? hl('fa-qrcode', 'Class QR', "ProfilePage.run('openClassQR')") : ''}
+                ${hl('fa-camera', 'Scan QR', "ProfilePage.run('openQRScanner')")}
+                ${hl('fa-wand-magic-sparkles', 'Ask', "switchPage('smartSearchPage')")}
+                ${hl('fa-bell', 'Alerts', "window.NotificationCenter && NotificationCenter.open()")}
+            </div>
 
-            ${currentClassName() ? group('Attendance tools', [
-                row({ icon: 'fa-briefcase-medical', tone: 'cyan', title: 'Mark OD / Medical leave', desc: 'Mark every class between two dates at once', action: 'ProfileTools.openLeave()' }),
-                row({ icon: 'fa-file-pen', tone: 'red', title: 'Exam days', desc: examDesc(), action: 'ProfileTools.openExams()' })
-            ]) : ''}
-
-            ${group('Preferences', [
-                row({ icon: 'fa-briefcase-medical', tone: 'cyan', title: 'OD / ML rule', desc: window.ProfileTools ? ProfileTools.ruleSummary() : odmlDesc(), action: 'ProfileTools.openOdmlLimit()' }),
-                row({ icon: 'fa-bullseye', tone: 'green', title: 'Minimum attendance required', desc: `${typeof getMinAttendanceCriteria === 'function' ? Math.round(getMinAttendanceCriteria() * 1000) / 10 : 75}% · used in every calculation`, action: 'ProfileTools.openMinAttendance()', trailing: `<span class="pf-value-pill">${typeof getMinAttendanceCriteria === 'function' ? Math.round(getMinAttendanceCriteria() * 1000) / 10 : 75}%</span><i class="fa-solid fa-chevron-right pf-row-arrow"></i>` }),
-                row({ icon: 'fa-bell', tone: 'orange', title: 'Notifications', desc: 'Daily attendance reminders', action: "ProfilePage.run('showNotificationPermissionModal')" }),
-                row({ icon: 'fa-moon', tone: 'slate', title: 'Dark mode', desc: isDark() ? 'On' : 'Off', action: 'ProfilePage.toggleTheme()', trailing: darkToggle }),
-                row({ icon: 'fa-key', tone: 'violet', title: 'Gemini API key', desc: hasKey ? 'Personal key added' : 'Optional · for AI screenshot reading', action: "ProfilePage.run('openAPISettings')" })
-            ])}
-
-            ${group('Data & backup', [
-                row({ icon: 'fa-download', tone: 'green', title: 'Backup data', desc: 'Download, share or copy a backup file', action: "ProfilePage.run('openBackupModal')" }),
-                row({ icon: 'fa-upload', tone: 'cyan', title: 'Restore data', desc: 'Load a backup file', action: 'ProfilePage.restore()' })
-            ])}
-
-            ${group('Legal & info', LEGAL_LINKS.map(l => row({ icon: l.icon, tone: 'slate', title: l.title, href: l.href })))}
-
-            ${group('Account', user ? [
-                row({ icon: 'fa-right-from-bracket', tone: 'red', title: 'Sign out', desc: 'Your data stays synced to your account', action: 'ProfilePage.signOut()', danger: true }),
-                row({ icon: 'fa-user-xmark', tone: 'red', title: 'Delete account', desc: 'Permanently delete your account and cloud data', action: 'ProfilePage.deleteAccount()', danger: true })
-            ] : [
-                row({ icon: 'fa-right-to-bracket', tone: 'indigo', title: 'Sign in or create account', desc: 'Back up and sync across devices', action: 'ProfilePage.signIn()' })
-            ])}
-
+            <section class="pf-group">
+                <h3 class="pf-group-label">Your account</h3>
+                <div class="pf-card pf-list">
+                    ${navRow('personal', 'fa-user', 'indigo', 'Personal details', 'Name, phone number')}
+                    ${navRow('academic', 'fa-id-card', 'blue', 'Academic details', 'Registration no., college, branch, semester')}
+                    ${navRow('security', 'fa-shield-halved', 'green', 'Login & security', user ? 'Email, password' : 'Create an account')}
+                </div>
+            </section>
+            <section class="pf-group">
+                <h3 class="pf-group-label">Class & attendance</h3>
+                <div class="pf-card pf-list">
+                    ${navRow('class', 'fa-graduation-cap', 'amber', 'Class', cls ? esc(cls) : 'No class yet')}
+                    ${cls ? navRow('tools', 'fa-briefcase-medical', 'cyan', 'Attendance tools', 'OD / Medical leave, exam days') : ''}
+                </div>
+            </section>
+            <section class="pf-group">
+                <h3 class="pf-group-label">App</h3>
+                <div class="pf-card pf-list">
+                    ${navRow('prefs', 'fa-sliders', 'violet', 'Preferences', 'Minimum %, OD/ML rule, notifications, theme')}
+                    ${navRow('data', 'fa-cloud-arrow-down', 'green', 'Data & backup', 'Backup and restore')}
+                    ${navRow('legal', 'fa-circle-info', 'slate', 'Legal & info', 'About, FAQ, privacy, terms')}
+                </div>
+            </section>
+            <section class="pf-group">
+                <div class="pf-card pf-list">
+                    ${user
+                        ? row({ icon: 'fa-right-from-bracket', tone: 'red', title: 'Sign out', action: 'ProfilePage.signOut()', danger: true })
+                        : row({ icon: 'fa-right-to-bracket', tone: 'indigo', title: 'Sign in or create account', desc: 'Back up and sync across devices', action: 'ProfilePage.signIn()' })}
+                </div>
+            </section>
             <footer class="pf-footer">
                 <img src="icon-96x96.png" alt="" width="28" height="28">
                 <span>Bunkit · Smart Attendance Manager</span>
                 <span class="pf-credit">Developed by <strong>Faisal Khan and Sheikh Hemayoou</strong></span>
             </footer>`;
+    }
+
+    const PAGES = {
+        personal: { title: 'Personal details', body: () => `
+            <div class="pf-card pf-list">${fieldLine('name')}${fieldLine('phone')}</div>
+            <p class="pf-page-note">Tap <i class="fa-solid fa-ellipsis"></i> to edit your details.</p>` },
+        academic: { title: 'Academic details', body: () => `
+            <div class="pf-card pf-list">${['regNo', 'college', 'branch', 'semester'].map(fieldLine).join('')}</div>
+            <p class="pf-page-note">Tap <i class="fa-solid fa-ellipsis"></i> to edit.</p>` },
+        security: { title: 'Login & security', body: () => {
+            const user = window.AuthManager?.user;
+            if (!user) return `<div class="pf-card pf-security-guest"><i class="fa-solid fa-lock"></i><div><strong>No account yet</strong><span>Create an account to add an email and password, and back up your data.</span></div><button class="pf-btn pf-btn-primary" onclick="ProfilePage.signIn()">Create account</button></div>`;
+            const google = (user.app_metadata?.providers || [user.app_metadata?.provider]).includes('google');
+            return `<div class="pf-card pf-list">
+                ${infoLine('fa-envelope', 'Email', user.email + (user.email_confirmed_at ? ' ✓' : ''))}
+                ${infoLine('fa-key', 'Password', google ? 'Signed in with Google' : '••••••••')}
+                ${infoLine('fa-calendar', 'Member since', user.created_at ? fmtDate(user.created_at.slice(0, 10)) : '')}
+            </div>
+            <p class="pf-page-note">Tap <i class="fa-solid fa-ellipsis"></i> to change your email or password.</p>
+            <section class="pf-group"><div class="pf-card pf-list">${row({ icon: 'fa-user-xmark', tone: 'red', title: 'Delete account', desc: 'Permanently delete your account and cloud data', action: 'ProfilePage.deleteAccount()', danger: true })}</div></section>`;
+        } },
+        class: { title: 'Class', body: () => {
+            const name = currentClassName();
+            if (!name) return `<div class="pf-card pf-empty-card"><i class="fa-solid fa-graduation-cap"></i><strong>No class yet</strong><span>Add your class or scan a classmate's class QR.</span>
+                <div class="pf-empty-btns"><button class="pf-btn pf-btn-primary" onclick="ProfilePage.run('openAddClassModal')">Add class</button><button class="pf-btn" onclick="ProfilePage.run('openQRScanner')">Scan QR</button></div></div>`;
+            const c = classes[name];
+            const mode = c.timetableMode && window.TT_MODE_LABELS ? TT_MODE_LABELS[c.timetableMode] : 'Not set';
+            return `<div class="pf-card pf-list">
+                ${infoLine('fa-graduation-cap', 'Class name', name)}
+                ${infoLine('fa-book', 'Subjects', `${(c.subjects || []).length} subjects`)}
+                ${infoLine('fa-calendar-day', 'Semester', c.lastDate ? `${c.portalSetup?.semesterStartDate ? fmtDate(c.portalSetup.semesterStartDate) : 'Start not set'} → ${fmtDate(c.lastDate)}` : '')}
+                ${infoLine('fa-calendar-week', 'Timetable mode', mode)}
+            </div>
+            <section class="pf-group"><div class="pf-card pf-list">
+                ${row({ icon: 'fa-table-cells', tone: 'indigo', title: 'Timetable & class timings', action: "ProfilePage.run('openTimetablePage')" })}
+                ${row({ icon: 'fa-graduation-cap', tone: 'green', title: 'Portal settings', desc: 'Baseline attendance and semester start', action: "ProfilePage.run('openPortalSetup')" })}
+            </div></section>
+            <p class="pf-page-note">Tap <i class="fa-solid fa-ellipsis"></i> to edit, share or delete this class.</p>`;
+        } },
+        tools: { title: 'Attendance tools', body: () => `<div class="pf-card pf-list">
+            ${row({ icon: 'fa-briefcase-medical', tone: 'cyan', title: 'Mark OD / Medical leave', desc: 'Mark every class between two dates at once', action: 'ProfileTools.openLeave()' })}
+            ${row({ icon: 'fa-file-pen', tone: 'red', title: 'Exam days', desc: examDesc(), action: 'ProfileTools.openExams()' })}
+        </div>` },
+        prefs: { title: 'Preferences', body: () => {
+            const minPct = typeof getMinAttendanceCriteria === 'function' ? Math.round(getMinAttendanceCriteria() * 1000) / 10 : 75;
+            const hasKey = !!localStorage.getItem('personalGeminiKey');
+            const darkToggle = `<span class="pf-switch ${isDark() ? 'on' : ''}" role="switch" aria-checked="${isDark()}"><span></span></span>`;
+            return `<div class="pf-card pf-list">
+                ${row({ icon: 'fa-bullseye', tone: 'green', title: 'Minimum attendance required', desc: 'Used in every calculation', action: 'ProfileTools.openMinAttendance()', trailing: `<span class="pf-value-pill">${minPct}%</span><i class="fa-solid fa-chevron-right pf-row-arrow"></i>` })}
+                ${row({ icon: 'fa-briefcase-medical', tone: 'cyan', title: 'OD / ML rule', desc: window.ProfileTools ? ProfileTools.ruleSummary() : odmlDesc(), action: 'ProfileTools.openOdmlLimit()' })}
+                ${row({ icon: 'fa-bell', tone: 'orange', title: 'Notifications', desc: 'Daily and after-class reminders', action: "ProfilePage.run('showNotificationPermissionModal')" })}
+                ${row({ icon: 'fa-moon', tone: 'slate', title: 'Dark mode', desc: isDark() ? 'On' : 'Off', action: 'ProfilePage.toggleTheme()', trailing: darkToggle })}
+                ${row({ icon: 'fa-key', tone: 'violet', title: 'Gemini API key', desc: hasKey ? 'Personal key added' : 'Optional · for AI screenshot reading', action: "ProfilePage.run('openAPISettings')" })}
+            </div>`;
+        } },
+        data: { title: 'Data & backup', body: () => `<div class="pf-card pf-list">
+            ${row({ icon: 'fa-download', tone: 'green', title: 'Backup data', desc: 'Download, share or copy a backup file', action: "ProfilePage.run('openBackupModal')" })}
+            ${row({ icon: 'fa-upload', tone: 'cyan', title: 'Restore data', desc: 'Load a backup file', action: 'ProfilePage.restore()' })}
+        </div>` },
+        legal: { title: 'Legal & info', body: () => `<div class="pf-card pf-list">${LEGAL_LINKS.map(l => row({ icon: l.icon, tone: 'slate', title: l.title, href: l.href })).join('')}</div>` }
+    };
+
+    // ⋯ menu entries for each page
+    function menuItems(page) {
+        const user = window.AuthManager?.user;
+        const cls = currentClassName();
+        const p = getProfile();
+        switch (page) {
+            case 'main': return [
+                { icon: 'fa-pen', label: 'Edit profile', fn: () => go('personal') },
+                cls && { icon: 'fa-qrcode', label: 'Share class QR', fn: () => run('openClassQR') },
+                { icon: 'fa-moon', label: isDark() ? 'Switch to light mode' : 'Switch to dark mode', fn: () => toggleTheme() },
+                { icon: 'fa-sliders', label: 'Settings', fn: () => go('prefs') },
+                user ? { icon: 'fa-right-from-bracket', label: 'Sign out', fn: () => signOut(), danger: true }
+                     : { icon: 'fa-right-to-bracket', label: 'Sign in', fn: () => signIn() }
+            ];
+            case 'personal': return [
+                { icon: 'fa-user', label: displayName() ? 'Edit full name' : 'Add full name', fn: () => editField('name') },
+                { icon: 'fa-phone', label: p.phone ? 'Edit phone number' : 'Add phone number', fn: () => editField('phone') },
+                p.phone && { icon: 'fa-trash-can', label: 'Remove phone number', fn: () => clearField('phone'), danger: true }
+            ];
+            case 'academic': return [
+                { icon: 'fa-id-card', label: 'Edit registration number', fn: () => editField('regNo') },
+                { icon: 'fa-building-columns', label: 'Edit college / university', fn: () => editField('college') },
+                { icon: 'fa-sitemap', label: 'Edit branch / department', fn: () => editField('branch') },
+                { icon: 'fa-layer-group', label: 'Edit semester', fn: () => editField('semester') }
+            ];
+            case 'security': return user ? [
+                { icon: 'fa-envelope', label: 'Change email', fn: () => editEmail() },
+                { icon: 'fa-key', label: 'Change password', fn: () => editPassword() },
+                { icon: 'fa-user-xmark', label: 'Delete account', fn: () => deleteAccount(), danger: true }
+            ] : [{ icon: 'fa-right-to-bracket', label: 'Create account / sign in', fn: () => signIn() }];
+            case 'class': return cls ? [
+                { icon: 'fa-pen-to-square', label: 'Edit class', fn: () => run('editSelectedClass') },
+                { icon: 'fa-calendar-week', label: 'Timetable mode', fn: () => run('TimetableModes.openModeEditor') },
+                { icon: 'fa-qrcode', label: 'Share class QR', fn: () => run('openClassQR') },
+                { icon: 'fa-trash-can', label: 'Delete class', fn: () => run('deleteSelectedClass'), danger: true }
+            ] : [
+                { icon: 'fa-plus', label: 'Add class', fn: () => run('openAddClassModal') },
+                { icon: 'fa-camera', label: 'Scan class QR', fn: () => run('openQRScanner') }
+            ];
+            case 'data': return [
+                { icon: 'fa-download', label: 'Backup now', fn: () => run('openBackupModal') },
+                { icon: 'fa-upload', label: 'Restore from file', fn: () => restore() }
+            ];
+            default: return [];
+        }
+    }
+
+    let menuFns = [];
+    function menu(page) {
+        const items = menuItems(page).filter(Boolean);
+        if (!items.length) return;
+        menuFns = items.map(i => i.fn);
+        let el = document.getElementById('pfMenu');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'pfMenu';
+            el.className = 'pf-sheet-wrap pf-menu-wrap';
+            el.addEventListener('click', e => { if (e.target === el) closeMenu(); });
+            document.body.appendChild(el);
+        }
+        el.classList.toggle('dark', isDark());
+        el.innerHTML = `
+            <div class="pf-sheet pf-menu" role="menu">
+                <div class="pf-sheet-grip"></div>
+                ${items.map((it, i) => `<button type="button" class="pf-menu-item ${it.danger ? 'danger' : ''}" role="menuitem" onclick="ProfilePage._pick(${i})"><i class="fa-solid ${it.icon}"></i><span>${esc(it.label)}</span></button>`).join('')}
+                <button type="button" class="pf-menu-item pf-menu-cancel" onclick="ProfilePage.closeMenu()">Cancel</button>
+            </div>`;
+        el.classList.add('open');
+    }
+    function closeMenu() { document.getElementById('pfMenu')?.classList.remove('open'); }
+    function pick(i) { closeMenu(); const fn = menuFns[i]; if (fn) setTimeout(fn, 160); }
+
+    async function clearField(key) {
+        const profile = { ...getProfile(), [key]: '' };
+        const result = await persistProfile(profile);
+        render();
+        toast(`${FIELDS[key].label} removed`, result);
+    }
+
+    function go(page) {
+        view = PAGES[page] ? page : 'main';
+        render();
+        document.getElementById('accountPage')?.scrollIntoView({ block: 'start' });
+        window.scrollTo(0, 0);
+    }
+
+    function render() {
+        const root = document.getElementById('profileRoot');
+        if (!root) return;
+        if (view !== 'main' && PAGES[view]) {
+            const pg = PAGES[view];
+            const hasMenu = menuItems(view).filter(Boolean).length > 0;
+            root.innerHTML = `
+                <div class="pf-subpage">
+                    <header class="pf-sub-top">
+                        <button class="pf-dots" onclick="ProfilePage.go('main')" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+                        <h1>${pg.title}</h1>
+                        ${hasMenu ? `<button class="pf-dots" onclick="ProfilePage.menu('${view}')" aria-label="More options"><i class="fa-solid fa-ellipsis"></i></button>` : '<span class="pf-dots-ph"></span>'}
+                    </header>
+                    <div class="pf-sub-body">${pg.body()}</div>
+                </div>`;
+            return;
+        }
+        root.innerHTML = `<div class="pf-mainview">${renderMain()}</div>`;
     }
 
     // --- Actions ---
@@ -505,9 +605,7 @@
         });
     }
 
-    function editDetails() {
-        document.getElementById('pfDetails')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    function editDetails() { go('personal'); }
 
     function editEmail() {
         const user = window.AuthManager?.user;
@@ -583,7 +681,8 @@
 
     window.ProfilePage = {
         render, run, toggleTheme, restore, signIn, syncNow, signOut, deleteAccount,
-        editDetails, editField, editEmail, editPassword, togglePw, closeSheet, submitSheet
+        editDetails, editField, editEmail, editPassword, togglePw, closeSheet, submitSheet,
+        go, menu, closeMenu, _pick: pick
     };
 
     // Keep the page current when it is visible

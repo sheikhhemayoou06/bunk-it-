@@ -993,3 +993,22 @@ body.dark-mode .tt-eff-modal {
     font-size: 0.88rem;
     line-height: 1.6;
 }
+
+/* ---- Class timings ---- */
+.tm-ptime { display: block; margin-top: 2px; font-size: 0.66rem; font-weight: 600; color: var(--tm-muted); }
+.tm-autofill { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 10px; align-items: end; padding: 12px; border-radius: 12px; background: var(--tm-bg); margin-bottom: 14px; }
+.tm-autofill label { display: flex; flex-direction: column; gap: 4px; font-size: 0.74rem; font-weight: 600; color: var(--tm-muted); }
+.tm-autofill input, .tm-autofill select, .tm-time-row input { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--tm-border); background: var(--tm-surface); color: var(--tm-text); font-family: inherit; font-size: 0.92rem; min-width: 0; }
+.tm-times { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; }
+.tm-time-row { display: grid; grid-template-columns: 34px 1fr auto 1fr; align-items: center; gap: 8px; }
+.tm-time-p { font-weight: 700; font-size: 0.85rem; color: var(--tm-accent); }
+.tm-time-sep { color: var(--tm-muted); }
+.tm-time-msg { min-height: 1.1em; margin: 10px 0 0; font-size: 0.82rem; color: var(--tm-muted); }
+.tm-time-msg.err { color: var(--tm-danger); }
+.tm-flash { animation: tmFlash 1.6s ease; }
+@keyframes tmFlash { 20% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.35); } }
+@media (max-width: 640px) {
+    .tm-autofill { grid-template-columns: 1fr 1fr 1fr; }
+    .tm-autofill .tm-btn { grid-column: 1 / -1; }
+    .tm-times { grid-template-columns: 1fr; }
+}

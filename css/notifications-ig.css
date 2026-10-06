@@ -491,3 +491,116 @@ body.ign-lock {
 @media (prefers-reduced-motion: reduce) {
     .ign-row { animation: none; }
 }
+
+/* ---- "Class just ended" reminder cards (above the bottom bar) ---- */
+.crm-stack {
+    position: fixed;
+    left: 50%;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 1003;
+    width: min(460px, calc(100% - 24px));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.crm-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px 12px;
+    padding: 14px 40px 14px 14px;
+    border-radius: 18px;
+    background: #111827;
+    color: #fff;
+    box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+    transition: opacity 0.3s, transform 0.35s cubic-bezier(.2, .8, .2, 1);
+}
+
+.crm-card.show {
+    opacity: 1;
+    transform: none;
+}
+
+body.dark-mode .crm-card {
+    background: #1e2638;
+    border: 1px solid #2b3a52;
+}
+
+.crm-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #6366f1, #ec4899);
+    animation: crmRing 1.2s ease-in-out 2;
+}
+
+.crm-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.crm-text strong {
+    font-size: 0.95rem;
+}
+
+.crm-text span {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+.crm-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.crm-btn {
+    min-height: 40px;
+    border: none;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.crm-yes { background: #22c55e; color: #fff; }
+.crm-no { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.crm-x {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+}
+
+@keyframes crmRing {
+    0%, 100% { transform: rotate(0); }
+    20% { transform: rotate(-14deg); }
+    40% { transform: rotate(12deg); }
+    60% { transform: rotate(-8deg); }
+    80% { transform: rotate(4deg); }
+}
+
+@media (min-width: 900px) {
+    .crm-stack { left: auto; right: 24px; transform: none; bottom: 24px; }
+}

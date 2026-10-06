@@ -36,7 +36,7 @@ messaging.onBackgroundMessage((payload) => {
 
 // ==================== END FIREBASE CLOUD MESSAGING ====================
 
-const CACHE_NAME = 'bunkit-v2.53';
+const CACHE_NAME = 'bunkit-v2.56';
 const ASSETS_TO_CACHE = [
     // NOTE: index.html intentionally NOT cached to prevent stale data issues
     // The service worker will still serve it via network-first strategy
@@ -396,6 +396,12 @@ self.addEventListener('notificationclick', (event) => {
         return;
     }
 
+    // "<class> just ended" notification
+    if (data.kind === 'class-check' && data.date && data.key) {
+        event.waitUntil(handleClassCheckClick(event.action, data));
+        return;
+    }
+
     event.waitUntil(
         (async () => {
             // Try to find an existing open window/tab
@@ -420,6 +426,26 @@ self.addEventListener('notificationclick', (event) => {
         })()
     );
 });
+
+async function handleClassCheckClick(action, data) {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const appClients = allClients.filter(c => c.url.startsWith(self.location.origin));
+    const status = action === 'present' ? 'Attended' : action === 'absent' ? 'Skipped' : null;
+    if (status) {
+        if (appClients.length) {
+            appClients[0].postMessage({ type: 'CLASS_MARK', date: data.date, key: data.key, status });
+        } else {
+            const queue = (await getFromIndexedDB('pendingClassMarks')) || [];
+            queue.push({ date: data.date, key: data.key, status, className: data.className, at: new Date().toISOString() });
+            await saveToIndexedDB('pendingClassMarks', queue);
+        }
+        await logForApp({ icon: status === 'Attended' ? '✅' : '❌', title: `Marked ${status === 'Attended' ? 'present' : 'absent'} from notification`, body: shortDate(data.date) });
+        return;
+    }
+    // Tapped the notification itself: open the app on Home
+    if (appClients.length) { await appClients[0].focus(); }
+    else { await clients.openWindow('/'); }
+}
 
 async function handleDayCheckClick(action, data) {
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });

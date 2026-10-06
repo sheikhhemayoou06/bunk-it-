@@ -4523,83 +4523,178 @@
             margin-top: 5px;
         }
 
-        /* --- Animated Welcome Splash --- */
+        /* --- Animated Welcome Splash (every open / reload) --- */
         .bk-splash {
+            --bks-logo: clamp(84px, 24vmin, 156px);
             position: fixed;
             inset: 0;
             z-index: 2147483000;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 18px;
-            background: radial-gradient(circle at 50% 40%, #2b3a8f 0%, #111a44 55%, #070b1f 100%);
+            overflow: hidden;
             cursor: pointer;
-            animation: bkSplashOut 0.5s ease 2.6s forwards;
-        }
-
-        .bk-splash-logo-wrap {
-            position: relative;
-            width: 130px;
-            height: 130px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .bk-splash-logo {
-            width: 130px;
-            height: 130px;
-            border-radius: 30px;
-            box-shadow: 0 0 40px rgba(96, 120, 255, 0.55);
-            position: relative;
-            z-index: 1;
-            animation: bkLogoPop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-                bkLogoFloat 2.4s ease-in-out 0.9s infinite;
-        }
-
-        .bk-splash-ring {
-            position: absolute;
-            inset: 0;
-            border-radius: 34px;
-            border: 2px solid rgba(140, 160, 255, 0.6);
-            opacity: 0;
-            animation: bkRing 1.8s ease-out 0.6s infinite;
-        }
-
-        .bk-splash-ring-2 {
-            animation-delay: 1.5s;
-        }
-
-        .bk-splash-title {
-            display: flex;
-            margin: 0;
-            font-size: 2.6rem;
-            font-weight: 800;
-            letter-spacing: 1px;
+            background: #060a1f;
             color: #fff;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            -webkit-tap-highlight-color: transparent;
+            clip-path: circle(150% at 50% 46%);
+            animation: bksExit 0.75s cubic-bezier(0.7, 0, 0.3, 1) 2.55s forwards;
         }
 
-        .bk-splash-title span {
-            display: inline-block;
-            opacity: 0;
-            animation: bkLetterUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        /* Background: drifting colour orbs, moving grid, rising particles */
+        .bks-bg { position: absolute; inset: 0; pointer-events: none; }
+        .bks-orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.75; }
+        .bks-orb.o1 { width: 70vmax; height: 70vmax; left: -25vmax; top: -30vmax; background: radial-gradient(circle, #4f46e5 0%, transparent 65%); animation: bksDrift1 7s ease-in-out infinite alternate; }
+        .bks-orb.o2 { width: 60vmax; height: 60vmax; right: -25vmax; bottom: -28vmax; background: radial-gradient(circle, #db2777 0%, transparent 62%); opacity: 0.45; animation: bksDrift2 8s ease-in-out infinite alternate; }
+        .bks-orb.o3 { width: 45vmax; height: 45vmax; left: 30%; top: 40%; background: radial-gradient(circle, #06b6d4 0%, transparent 60%); opacity: 0.35; animation: bksDrift1 9s ease-in-out infinite alternate-reverse; }
+        .bks-grid {
+            position: absolute; inset: -40px;
+            background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 44px 44px;
+            -webkit-mask-image: radial-gradient(circle at 50% 46%, #000 0%, transparent 62%);
+            mask-image: radial-gradient(circle at 50% 46%, #000 0%, transparent 62%);
+            animation: bksGrid 6s linear infinite;
+            opacity: 0; animation: bksGrid 6s linear infinite, bksFade 1s ease 0.2s forwards;
+        }
+        .bks-particles i {
+            position: absolute; bottom: -10px; left: var(--x); width: var(--s); height: var(--s); border-radius: 50%;
+            background: rgba(190, 200, 255, 0.85); box-shadow: 0 0 8px rgba(160, 180, 255, 0.9);
+            opacity: 0; animation: bksRise var(--d) linear var(--w) infinite;
         }
 
-        .bk-splash-title span:nth-child(1) { animation-delay: 0.7s; }
-        .bk-splash-title span:nth-child(2) { animation-delay: 0.78s; }
-        .bk-splash-title span:nth-child(3) { animation-delay: 0.86s; }
-        .bk-splash-title span:nth-child(4) { animation-delay: 0.94s; }
-        .bk-splash-title span:nth-child(5) { animation-delay: 1.02s; }
-        .bk-splash-title span:nth-child(6) { animation-delay: 1.1s; }
+        /* Centre stack */
+        .bks-center { position: relative; display: flex; flex-direction: column; align-items: center; gap: clamp(10px, 2.6vmin, 22px); text-align: center; }
+        .bks-logo-wrap { position: relative; width: var(--bks-logo); height: var(--bks-logo); margin-bottom: clamp(4px, 1.5vmin, 12px); }
 
-        .bk-splash-tagline {
-            margin: 0;
-            color: #aab6ff;
-            font-size: 0.95rem;
-            letter-spacing: 0.5px;
+        .bks-halo {
+            position: absolute; inset: -38%; border-radius: 50%;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.55) 0%, rgba(99, 102, 241, 0.12) 45%, transparent 70%);
+            opacity: 0; transform: scale(0.4);
+            animation: bksHalo 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards, bksBreathe 2.4s ease-in-out 1.3s infinite;
+        }
+        /* Rotating gradient ring with an orbiting dot */
+        .bks-orbit {
+            position: absolute; inset: -16%; border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent 0 55%, rgba(129, 140, 248, 0.9) 75%, #f0abfc 90%, transparent 100%);
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+            opacity: 0; animation: bksFade 0.5s ease 0.55s forwards, bksSpin 1.6s linear 0.55s infinite;
+        }
+        .bks-orbit i {
+            position: absolute; top: -4px; left: 50%; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%;
+            background: #fff; box-shadow: 0 0 12px 4px rgba(240, 171, 252, 0.9);
+        }
+        .bks-ring {
+            position: absolute; inset: 0; border-radius: 28%; border: 2px solid rgba(165, 180, 252, 0.7);
+            opacity: 0; animation: bksRingOut 1.9s ease-out 0.9s infinite;
+        }
+        .bks-ring.r2 { animation-delay: 1.85s; }
+
+        .bks-logo {
+            position: relative; width: 100%; height: 100%; border-radius: 26%; overflow: hidden;
+            box-shadow: 0 18px 50px -10px rgba(79, 70, 229, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
             opacity: 0;
-            animation: bkFadeIn 0.6s ease 1.4s forwards;
+            animation: bksLogoIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s forwards, bksFloat 3s ease-in-out 1.2s infinite;
+        }
+        .bks-logo img { width: 100%; height: 100%; display: block; }
+        .bks-shine {
+            position: absolute; inset: 0;
+            background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.55) 48%, transparent 66%);
+            transform: translateX(-130%); animation: bksShine 0.9s ease-in-out 0.95s forwards;
+        }
+
+        .bks-title {
+            display: flex; margin: 0; perspective: 600px;
+            font-size: clamp(2.1rem, 10vmin, 3.6rem); font-weight: 800; letter-spacing: 0.02em; line-height: 1;
+        }
+        .bks-title span {
+            display: inline-block; opacity: 0; transform-origin: 50% 100%;
+            background: linear-gradient(100deg, #ffffff 0%, #ffffff 40%, #c7d2fe 50%, #ffffff 60%, #ffffff 100%);
+            background-size: 300% 100%;
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+            animation: bksLetter 0.7s cubic-bezier(0.22, 1.3, 0.36, 1) forwards, bksShimmer 1.6s ease-in-out 1.75s forwards;
+        }
+        .bks-title span:nth-child(1) { animation-delay: 0.85s, 1.75s; }
+        .bks-title span:nth-child(2) { animation-delay: 0.92s, 1.79s; }
+        .bks-title span:nth-child(3) { animation-delay: 0.99s, 1.83s; }
+        .bks-title span:nth-child(4) { animation-delay: 1.06s, 1.87s; }
+        .bks-title span:nth-child(5) { animation-delay: 1.13s, 1.91s; }
+        .bks-title span:nth-child(6) { animation-delay: 1.2s, 1.95s; }
+
+        .bks-tagline {
+            margin: 0; font-size: clamp(0.82rem, 2.6vmin, 1.05rem); letter-spacing: 0.04em; color: #c3cbff;
+            opacity: 0; transform: translateY(10px); filter: blur(4px);
+            animation: bksTag 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 1.5s forwards;
+        }
+
+        .bks-loader {
+            position: absolute; left: 50%; bottom: calc(clamp(28px, 9vh, 72px) + env(safe-area-inset-bottom));
+            width: clamp(120px, 34vmin, 220px); height: 3px; margin-left: calc(clamp(120px, 34vmin, 220px) / -2);
+            border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden;
+            opacity: 0; animation: bksFade 0.4s ease 0.4s forwards;
+        }
+        .bks-loader i {
+            display: block; height: 100%; width: 0; border-radius: inherit;
+            background: linear-gradient(90deg, #818cf8, #f0abfc, #67e8f9);
+            box-shadow: 0 0 12px rgba(240, 171, 252, 0.8);
+            animation: bksLoad 2.1s cubic-bezier(0.45, 0, 0.2, 1) 0.45s forwards;
+        }
+
+        /* Exit: the logo lifts away while an iris closes on it, revealing the app */
+        .bk-splash .bks-center { animation: bksCenterOut 0.6s cubic-bezier(0.7, 0, 0.3, 1) 2.5s forwards; }
+
+        /* Short / landscape screens */
+        @media (max-height: 520px) {
+            .bk-splash { --bks-logo: clamp(64px, 20vh, 104px); }
+            .bks-center { gap: 8px; }
+            .bks-title { font-size: clamp(1.7rem, 9vh, 2.6rem); }
+            .bks-loader { bottom: calc(16px + env(safe-area-inset-bottom)); }
+        }
+        /* Large screens */
+        @media (min-width: 1200px) and (min-height: 760px) {
+            .bk-splash { --bks-logo: 168px; }
+        }
+
+        @keyframes bksExit {
+            0% { clip-path: circle(150% at 50% 46%); opacity: 1; visibility: visible; }
+            85% { opacity: 1; }
+            100% { clip-path: circle(0% at 50% 46%); opacity: 0; visibility: hidden; pointer-events: none; }
+        }
+        @keyframes bksCenterOut { to { transform: scale(0.82) translateY(-6px); opacity: 0; filter: blur(6px); } }
+        @keyframes bksLogoIn {
+            0% { opacity: 0; transform: scale(0.25) rotate(-24deg); filter: blur(10px); }
+            60% { opacity: 1; filter: blur(0); }
+            100% { opacity: 1; transform: scale(1) rotate(0); filter: none; }
+        }
+        @keyframes bksFloat { 50% { transform: translateY(-7px); } }
+        @keyframes bksHalo { to { opacity: 1; transform: scale(1); } }
+        @keyframes bksBreathe { 50% { transform: scale(1.08); opacity: 0.8; } }
+        @keyframes bksSpin { to { transform: rotate(360deg); } }
+        @keyframes bksRingOut { 0% { opacity: 0.85; transform: scale(1); } 100% { opacity: 0; transform: scale(1.75); } }
+        @keyframes bksShine { to { transform: translateX(130%); } }
+        @keyframes bksLetter {
+            0% { opacity: 0; transform: translateY(0.6em) rotateX(-80deg) scale(0.9); filter: blur(8px); }
+            100% { opacity: 1; transform: none; filter: blur(0); }
+        }
+        @keyframes bksShimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+        @keyframes bksTag { to { opacity: 1; transform: none; filter: none; } }
+        @keyframes bksLoad { to { width: 100%; } }
+        @keyframes bksFade { to { opacity: 1; } }
+        @keyframes bksGrid { to { transform: translateY(44px); } }
+        @keyframes bksRise {
+            0% { opacity: 0; transform: translateY(0) scale(0.6); }
+            15% { opacity: 0.9; }
+            100% { opacity: 0; transform: translateY(-105vh) scale(1); }
+        }
+        @keyframes bksDrift1 { to { transform: translate(8vmax, 6vmax) scale(1.12); } }
+        @keyframes bksDrift2 { to { transform: translate(-7vmax, -5vmax) scale(1.08); } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .bk-splash, .bk-splash * { animation-duration: 0.01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
+            .bk-splash { animation: bksExit 0.4s ease 1.2s forwards !important; }
+            .bks-logo, .bks-title span, .bks-tagline, .bks-halo, .bks-loader { opacity: 1 !important; transform: none !important; filter: none !important; }
         }
 
         /* Login card enters after the splash */
@@ -4865,6 +4960,16 @@
         .sem-start-field input { padding: 12px; border-radius: 12px; font-size: 1rem; }
         .sem-start-msg { min-height: 1.1em; margin: 8px 0 0; font-size: 0.82rem; color: #dc2626; }
         .sem-start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+
+.dash-class-live { border-color: rgba(16, 185, 129, 0.45) !important; background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), transparent 70%) !important; }
+        .dash-status-live { background: rgba(16, 185, 129, 0.14) !important; color: #059669 !important; font-weight: 700; animation: dashLive 1.6s ease-in-out infinite; }
+        @keyframes dashLive { 50% { opacity: 0.65; } }
+        .dash-day-done { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .dash-day-done > i { font-size: 1.4rem; color: #10b981; }
+        .dash-day-done > div { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; }
+        .dash-day-done span { opacity: 0.75; }
+        .dash-day-done button { border: none; border-radius: 10px; padding: 9px 16px; font: inherit; font-weight: 700; color: #fff; background: linear-gradient(135deg, #4f46e5, #3b82f6); cursor: pointer; }
+        .dash-set-times { width: 100%; margin-top: 10px; padding: 11px 12px; border-radius: 12px; border: 1px dashed rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.06); color: #4f46e5; font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
 
         #classReminderBanner {
             margin-bottom: 20px;
@@ -6373,13 +6478,13 @@
     <link rel="stylesheet" href="css/attendance-management.css?v=6">
     <link rel="stylesheet" href="css/smart-search.css?v=7">
     <link rel="stylesheet" href="css/smart-search-modern.css?v=4">
-    <link rel="stylesheet" href="css/timetable-modes.css?v=6">
-    <link rel="stylesheet" href="css/profile-page.css?v=7">
+    <link rel="stylesheet" href="css/timetable-modes.css?v=7">
+    <link rel="stylesheet" href="css/profile-page.css?v=8">
     <link rel="stylesheet" href="css/subjects-page.css?v=4">
     <link rel="stylesheet" href="css/day-check.css?v=8">
     <link rel="stylesheet" href="css/onboarding.css?v=1">
     <link rel="stylesheet" href="css/scan-results.css?v=1">
-    <link rel="stylesheet" href="css/notifications-ig.css?v=1">
+    <link rel="stylesheet" href="css/notifications-ig.css?v=2">
     <link rel="stylesheet" href="css/mobile-polish.css?v=4">
 </head>
 
@@ -6428,16 +6533,25 @@
     </div>
 
         <!-- Animated Welcome Splash (plays on every open / reload; tap to skip) -->
-    <div class="bk-splash" id="bkSplash" onclick="document.body.classList.add('bk-skip')" role="presentation">
-        <div class="bk-splash-logo-wrap">
-            <span class="bk-splash-ring"></span>
-            <span class="bk-splash-ring bk-splash-ring-2"></span>
-            <img src="icon-192x192.png" alt="Bunkit" class="bk-splash-logo">
+    <div class="bk-splash" id="bkSplash" onclick="document.body.classList.add('bk-skip')" role="presentation" aria-label="Bunkit">
+        <div class="bks-bg" aria-hidden="true">
+            <i class="bks-orb o1"></i><i class="bks-orb o2"></i><i class="bks-orb o3"></i>
+            <div class="bks-grid"></div>
+            <div class="bks-particles"><i style="--x:44%;--s:3px;--d:4.1s;--w:0.09s"></i><i style="--x:71%;--s:2px;--d:4.0s;--w:0.10s"></i><i style="--x:67%;--s:3px;--d:3.3s;--w:0.78s"></i><i style="--x:11%;--s:3px;--d:3.4s;--w:0.76s"></i><i style="--x:75%;--s:2px;--d:5.4s;--w:1.14s"></i><i style="--x:77%;--s:2px;--d:4.5s;--w:0.71s"></i><i style="--x:31%;--s:2px;--d:4.5s;--w:0.24s"></i><i style="--x:56%;--s:3px;--d:4.4s;--w:1.03s"></i><i style="--x:74%;--s:3px;--d:3.4s;--w:1.03s"></i><i style="--x:27%;--s:3px;--d:3.4s;--w:1.28s"></i><i style="--x:75%;--s:2px;--d:4.6s;--w:0.89s"></i><i style="--x:71%;--s:4px;--d:5.0s;--w:0.84s"></i><i style="--x:61%;--s:3px;--d:3.9s;--w:1.43s"></i><i style="--x:92%;--s:3px;--d:3.4s;--w:0.54s"></i><i style="--x:66%;--s:3px;--d:4.9s;--w:0.52s"></i><i style="--x:12%;--s:2px;--d:4.4s;--w:0.30s"></i></div>
         </div>
-        <h1 class="bk-splash-title" aria-label="Bunkit">
-            <span>B</span><span>u</span><span>n</span><span>k</span><span>i</span><span>t</span>
-        </h1>
-        <p class="bk-splash-tagline">Bunk smart. Never fall short.</p>
+        <div class="bks-center">
+            <div class="bks-logo-wrap">
+                <span class="bks-halo"></span>
+                <span class="bks-orbit"><i></i></span>
+                <span class="bks-ring"></span><span class="bks-ring r2"></span>
+                <div class="bks-logo"><img src="icon-192x192.png" alt="Bunkit" width="192" height="192"><span class="bks-shine"></span></div>
+            </div>
+            <h1 class="bks-title" aria-label="Bunkit">
+                <span>B</span><span>u</span><span>n</span><span>k</span><span>i</span><span>t</span>
+            </h1>
+            <p class="bks-tagline">Bunk smart. Never fall short.</p>
+        </div>
+        <div class="bks-loader" aria-hidden="true"><i></i></div>
     </div>
 
     <script>
@@ -6455,8 +6569,10 @@
             window.bkSplashEnd = end;
             var el = document.getElementById('bkSplash');
             if (!el) { end(); return; }
-            el.addEventListener('animationend', function (e) { if (e.animationName === 'bkSplashOut') end(); });
-            setTimeout(end, 3400); // safety net
+            el.addEventListener('animationend', function (e) {
+                if (e.target === el && (e.animationName === 'bksExit' || e.animationName === 'bkSplashOut')) end();
+            });
+            setTimeout(end, 4200); // safety net
         })();
     </script>
 
@@ -7911,7 +8027,7 @@
 
                 // Page-specific initialization
                 if (pageId === 'accountPage') {
-                    if (window.ProfilePage) ProfilePage.render();
+                    if (window.ProfilePage) ProfilePage.go ? ProfilePage.go('main') : ProfilePage.render();
                 } else if (pageId === 'timetablePage') {
                     if (window.TimetableModes) TimetableModes.render();
                 } else if (pageId === 'dashboardPage') {
@@ -8046,56 +8162,75 @@
                     return;
                 }
 
-                const className = selectedClass.name;
+                const className = selectedClass.name || document.getElementById('classSelector')?.value || localStorage.getItem('lastOpenedClass');
                 const arrangement = getTimetableArrangement(className, todayStr);
                 let dayArrangement = arrangement ? arrangement[adjustedDayIndex] : null;
                 const periodTimes = getPeriodTimes(className) || {};
 
-                let classesCount = 0;
+                const slots = (typeof getDaySlots === 'function' ? getDaySlots(className, todayStr) : []).filter(Boolean);
+                const nowMin = today.getHours() * 60 + today.getMinutes();
+                const toMin = (t) => (/^\d{1,2}:\d{2}$/.test(t || '') ? t.split(':').map(Number).reduce((h, m) => h * 60 + m) : null);
+                const fmt12 = (t) => {
+                    const m = toMin(t); if (m === null) return null;
+                    const h = Math.floor(m / 60), mm = String(m % 60).padStart(2, '0');
+                    return { time: `${((h + 11) % 12) + 1}:${mm}`, ampm: h < 12 ? 'AM' : 'PM' };
+                };
+                let dayLog = {};
+                try { dayLog = (JSON.parse(localStorage.getItem('attendance_logs') || '{}') || {})[todayStr] || {}; } catch (e) { dayLog = {}; }
+                const hasTimes = slots.some(sl => toMin(periodTimes[sl.idx]?.end) !== null);
+
+                let classesCount = slots.length;
+                let doneCount = 0, nextShown = false;
                 let html = '';
-
-                if (dayArrangement) {
-                    dayArrangement.forEach((rawSubject, periodIndex) => {
-                        if (!rawSubject) return;
-                        
-                        let subjectCode = typeof rawSubject === 'string' ? rawSubject : rawSubject.code;
-                        const subObj = selectedClass.subjects.find(s => s.code === subjectCode);
-                        if (!subObj) return;
-
-                        classesCount++;
-                        const timeInfo = periodTimes[periodIndex] || { start: '--:--', end: '--:--' };
-                        
-                        // Completed only if the period's end time has passed today
-                        let isCompleted = false;
-                        if (timeInfo.end && /^\d{1,2}:\d{2}$/.test(timeInfo.end)) {
-                            const [eh, em] = timeInfo.end.split(':').map(Number);
-                            const nowD = new Date();
-                            isCompleted = nowD.getHours() * 60 + nowD.getMinutes() >= eh * 60 + em;
-                        }
-
-                        html += `
-                            <div class="dash-class-item">
-                                <div class="dash-class-time">
-                                    <span>${timeInfo.start}</span>
-                                    <span class="dash-class-ampm">AM/PM</span>
-                                </div>
-                                <div class="dash-class-info">
-                                    <h4>${subObj.name}</h4>
-                                    <p>${subObj.classroom ? 'Room ' + subObj.classroom : 'Lecture'} • ${subObj.faculty || 'Faculty'}</p>
-                                </div>
-                                <div>
-                                    <span class="dash-class-status ${isCompleted ? 'dash-status-completed' : 'dash-status-upcoming'}">
-                                        ${isCompleted ? '✓ Completed' : 'Upcoming'}
-                                    </span>
-                                </div>
+                slots.forEach(sl => {
+                    const subObj = selectedClass.subjects.find(sub => sub.code === sl.code);
+                    if (!subObj) return;
+                    const t = periodTimes[sl.idx] || {};
+                    const startM = toMin(t.start), endM = toMin(t.end);
+                    // Finished classes leave the list (they're in the reminders / Missed days)
+                    if (endM !== null && nowMin >= endM) { doneCount++; return; }
+                    const live = startM !== null && endM !== null && nowMin >= startM && nowMin < endM;
+                    const isNext = !live && !nextShown && startM !== null && nowMin < startM;
+                    if (isNext) nextShown = true;
+                    const st = fmt12(t.start), en = fmt12(t.end);
+                    const mark = dayLog[sl.key];
+                    const left = live ? endM - nowMin : isNext ? startM - nowMin : null;
+                    html += `
+                        <div class="dash-class-item ${live ? 'dash-class-live' : ''}">
+                            <div class="dash-class-time">
+                                <span>${st ? st.time : `P${sl.idx + 1}`}</span>
+                                <span class="dash-class-ampm">${st ? st.ampm : 'Period'}</span>
                             </div>
-                        `;
-                    });
-                }
+                            <div class="dash-class-info">
+                                <h4>${subObj.name}</h4>
+                                <p>${st && en ? `${st.time} ${st.ampm} – ${en.time} ${en.ampm}` : `Period ${sl.idx + 1}`}${subObj.classroom ? ' • Room ' + subObj.classroom : ''}</p>
+                            </div>
+                            <div>
+                                <span class="dash-class-status ${live ? 'dash-status-live' : mark ? 'dash-status-completed' : 'dash-status-upcoming'}">
+                                    ${live ? `● Now${left ? ` · ${left}m left` : ''}` : mark ? '✓ Marked' : isNext ? `Next${left !== null ? ` · in ${left >= 60 ? Math.floor(left / 60) + 'h ' : ''}${left % 60}m` : ''}` : 'Upcoming'}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                });
 
+                if (classesCount && !html) {
+                    html = `<div class="dash-day-done">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div><strong>All ${classesCount} classes are over for today</strong><span>Mark attendance for any class you haven't yet.</span></div>
+                        <button onclick="window.DayCheck ? DayCheck.open('${todayStr}') : switchPage('studentPortalPage')">Mark</button>
+                    </div>`;
+                } else if (classesCount && !hasTimes) {
+                    html += `<button class="dash-set-times" onclick="openTimetablePage(); setTimeout(() => window.TimetableModes && TimetableModes.focusTimings && TimetableModes.focusTimings(), 400)">
+                        <i class="fa-regular fa-clock"></i> Add class timings to see times and get a reminder after each class</button>`;
+                }
                 if (classesCount === 0) {
                     html = `<div style="text-align:center; padding: 20px; color: var(--dash-text-muted);">No classes scheduled for today.</div>`;
                 }
+                if (countContainer) countContainer.textContent = classesCount
+                    ? (doneCount ? `${classesCount - doneCount} left · ${doneCount} done` : `${classesCount} Classes`) : '0 Classes';
+                listContainer.innerHTML = html;
+                return;
 
                 if(countContainer) countContainer.textContent = `${classesCount} Classes`;
                 listContainer.innerHTML = html;
@@ -13010,8 +13145,11 @@
              * Get period times for a class
              */
             function getPeriodTimes(className) {
-                const stored = localStorage.getItem(`periodTimes_${className}`);
-                return stored ? JSON.parse(stored) : null;
+                // Two keys exist for historical reasons; read whichever is set
+                try {
+                    const stored = localStorage.getItem(`periodTimes_${className}`) || localStorage.getItem(`period_times_${className}`);
+                    return stored ? JSON.parse(stored) : null;
+                } catch (e) { return null; }
             }
 
             /**
@@ -13019,9 +13157,33 @@
              */
             function savePeriodTimes(className, periodTimes) {
                 localStorage.setItem(`periodTimes_${className}`, JSON.stringify(periodTimes));
+                localStorage.setItem(`period_times_${className}`, JSON.stringify(periodTimes));
                 // Sync with Cloud
                 if (window.SyncManager) SyncManager.uploadAll();
             }
+
+            // A day's periods in order (null = free period), each with its attendance key (CODE_pN)
+            function getDaySlots(className, dateStr) {
+                const cls = classes[className];
+                if (!cls || (cls.holidays || []).includes(dateStr)) return [];
+                let periods = null;
+                try {
+                    const custom = JSON.parse(localStorage.getItem(`custom_schedules_${className}`) || '{}')[dateStr];
+                    if (custom && Array.isArray(custom._periods)) periods = custom._periods;
+                } catch (e) { /* ignore */ }
+                if (!periods) {
+                    const dow = parseLocalDate(dateStr).getDay();
+                    const arr = (getTimetableArrangement(className, dateStr) || {})[dow === 0 ? 6 : dow - 1];
+                    periods = Array.isArray(arr) ? arr.map(it => (it && typeof it === 'object' ? it.code : it) || null) : [];
+                }
+                const counts = {};
+                return periods.map((code, idx) => {
+                    if (!code || !cls.subjects.some(sub => sub.code === code)) return null;
+                    counts[code] = (counts[code] || 0) + 1;
+                    return { idx, code, key: `${code}_p${counts[code]}` };
+                });
+            }
+            window.getDaySlots = getDaySlots;
 
             /**
              * Check for attendance log conflicts in a date range
@@ -17435,13 +17597,17 @@ RULES:
 
             // Get period times from localStorage
             function getPeriodTimes(className) {
-                const saved = localStorage.getItem(`period_times_${className}`);
-                return saved ? JSON.parse(saved) : null;
+                try {
+                    const saved = localStorage.getItem(`periodTimes_${className}`) || localStorage.getItem(`period_times_${className}`);
+                    return saved ? JSON.parse(saved) : null;
+                } catch (e) { return null; }
             }
 
-            // Save period times to localStorage
+            // Save period times to localStorage (both keys, so every screen agrees)
             function savePeriodTimes(className, times) {
+                localStorage.setItem(`periodTimes_${className}`, JSON.stringify(times));
                 localStorage.setItem(`period_times_${className}`, JSON.stringify(times));
+                if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e) { /* offline */ } }
             }
 
             // Get timetable arrangement from localStorage or generate default
@@ -27370,12 +27536,13 @@ Answer helpfully using this context.`;
                 <!-- Attendance Management System -->
                 <script src="js/attendance-management.js?v=17"></script>
                 <script src="js/smart-search.js?v=26"></script>
-                <script src="js/timetable-modes.js?v=6"></script>
-                <script src="js/profile-page.js?v=9"></script>
+                <script src="js/timetable-modes.js?v=7"></script>
+                <script src="js/profile-page.js?v=11"></script>
                 <script src="js/scan-results.js?v=2"></script>
                 <script src="js/subjects-page.js?v=7"></script>
                 <script src="js/day-check.js?v=2"></script>
                 <script src="js/notification-center.js?v=6"></script>
+                <script src="js/class-reminders.js?v=1"></script>
                 <script src="js/profile-tools.js?v=4"></script>
                 <script src="js/attendance-calendar.js?v=3"></script>
                 <script src="js/onboarding.js?v=2"></script>
