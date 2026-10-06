@@ -2382,8 +2382,8 @@
             if (found) return handleSubjectQuery(query);
         }
 
-        // Ultimate fallback: show help
-        return handleHelp(query);
+        // Ultimate fallback: the AI answers (runQuery) — help card if it can't
+        return { ...handleHelp(query), _fallback: !/^\s*(help|what can (you|i) (ask|do))/i.test(query) };
     }
 
     // --- Render Answer ---
@@ -2440,10 +2440,11 @@
         return el;
     }
 
-    function appendUserMessage(text) {
+    function appendUserMessage(text, extraHtml = '') {
         const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         return appendMessage(`
-            <div class="si-bubble">${escapeHtml(text)}</div>
+            ${extraHtml}
+            ${text ? `<div class="si-bubble">${escapeHtml(text)}</div>` : ''}
             <div class="si-msg-meta">${time}</div>`, 'si-msg-user');
     }
 
@@ -2750,6 +2751,11 @@
                     body: `<p>Something went wrong while answering this. Try rephrasing, or message us on WhatsApp and we'll help.</p>`
                 };
             }
+            // Not a built-in question: let the AI answer with your attendance as context
+            if (result && result._fallback && window.SmartAttach && SmartAttach.aiAnswer) {
+                SmartAttach.aiAnswer(query, thinkingEl, result);
+                return;
+            }
             renderAnswer(result, thinkingEl, query);
         }, 450);
     }
@@ -2806,6 +2812,8 @@
         speakAnswer,
         setVoiceLang,
         normalizeIndic,
-        computeClassAttendance: autoComputeAttendanceData
+        computeClassAttendance: autoComputeAttendanceData,
+        // shared with js/smart-attach.js
+        _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread }
     };
 })();

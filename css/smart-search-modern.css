@@ -701,3 +701,95 @@ body.dark-mode #smartSearchPage {
     #smartSearchPage .si-odml-slot { order: 5; width: 100%; display: flex; justify-content: flex-start; }
     #smartSearchPage .si-odml-slot:empty { display: none; }
 }
+
+/* ============================================================
+   Image attachments + AI answers (ChatGPT-style)
+   ============================================================ */
+#smartSearchPage .si-attach-btn {
+    width: 38px; height: 38px; flex-shrink: 0; border: none; border-radius: 12px;
+    background: var(--si-bg); color: var(--si-text); font-size: 1rem; cursor: pointer;
+    transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+#smartSearchPage .si-attach-btn:hover { color: var(--si-accent); transform: rotate(90deg); }
+
+.si-attach-strip {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 0 4px 8px; padding: 8px; border-radius: 16px;
+    background: var(--si-surface); border: 1px solid var(--si-border);
+    animation: siRise 0.25s ease both;
+}
+.si-attach-strip[hidden] { display: none; }
+.si-attach-thumb { position: relative; width: 58px; height: 58px; border-radius: 12px; overflow: hidden; border: 1px solid var(--si-border); }
+.si-attach-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.si-attach-thumb button {
+    position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: none; border-radius: 50%;
+    background: rgba(17, 24, 39, 0.75); color: #fff; font-size: 0.65rem; cursor: pointer;
+}
+.si-attach-hint { font-size: 0.78rem; color: var(--si-text-secondary); padding-left: 4px; }
+
+/* What-to-add sheet */
+.si-attach-menu-wrap {
+    position: fixed; inset: 0; z-index: 1006; display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(15, 23, 42, 0.45); opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s;
+    font-family: 'Outfit', sans-serif;
+}
+.si-attach-menu-wrap.open { opacity: 1; visibility: visible; }
+.si-attach-menu {
+    width: 100%; max-width: 460px; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0; background: var(--card-bg, #fff); color: var(--dark-text, #1a1f36);
+    transform: translateY(100%); transition: transform 0.28s cubic-bezier(.2, .8, .2, 1);
+}
+@media (min-width: 640px) { .si-attach-menu-wrap { align-items: center; } .si-attach-menu { border-radius: 22px; } }
+.si-attach-menu-wrap.open .si-attach-menu { transform: none; }
+.si-am-grip { width: 40px; height: 4px; margin: 0 auto 12px; border-radius: 999px; background: rgba(100, 116, 139, 0.35); }
+.si-attach-menu h3 { margin: 0; font-size: 1.1rem; }
+.si-attach-menu > p { margin: 4px 0 12px; font-size: 0.84rem; color: var(--medium-text, #64748b); }
+.si-am-opt {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; margin-bottom: 6px;
+    border: 1px solid var(--border-color, #e5e8f0); border-radius: 14px; background: transparent;
+    color: inherit; font-family: inherit; text-align: left; cursor: pointer;
+}
+.si-am-opt:hover { border-color: #6366f1; background: rgba(99, 102, 241, 0.05); }
+.si-am-opt strong { display: block; font-size: 0.94rem; }
+.si-am-opt small { font-size: 0.78rem; color: var(--medium-text, #64748b); }
+.si-am-ic { width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg, #6366f1, #3b82f6); }
+.si-am-cancel { width: 100%; margin-top: 4px; padding: 12px; border: none; border-radius: 12px; background: var(--light-bg, #f3f4f6); color: inherit; font-family: inherit; font-weight: 600; cursor: pointer; }
+
+/* Images in the user's bubble */
+#smartSearchPage .si-msg-images { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; max-width: min(78%, 420px); }
+#smartSearchPage .si-msg-images img { width: 120px; height: 150px; object-fit: cover; border-radius: 16px; border: 1px solid var(--si-border); box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.35); }
+
+/* AI answer parts */
+#smartSearchPage .si-ai-h { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; font-size: 0.95rem; font-weight: 700; color: var(--si-text); }
+#smartSearchPage .si-ai-h:first-child { margin-top: 0; }
+#smartSearchPage .si-ai-h i { color: var(--si-accent); }
+#smartSearchPage .si-ai-answer { display: flex; gap: 10px; padding: 12px 14px; margin-bottom: 8px; border-radius: 14px; background: rgba(99, 102, 241, 0.07); }
+#smartSearchPage .si-ai-answer i { color: var(--si-accent); margin-top: 3px; }
+#smartSearchPage .si-ai-answer p { margin: 0; color: var(--si-text); }
+#smartSearchPage .si-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+#smartSearchPage .si-ai-act {
+    display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px;
+    border: 1px solid var(--si-border); background: var(--si-surface); color: var(--si-text);
+    font-family: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: transform 0.15s, filter 0.2s;
+}
+#smartSearchPage .si-ai-act.primary { border: none; color: #fff; background: var(--si-grad); box-shadow: 0 8px 18px -10px rgba(79, 70, 229, 0.8); }
+#smartSearchPage .si-ai-act:active { transform: scale(0.96); }
+#smartSearchPage .si-ai-act.done { border: none; color: #047857; background: rgba(16, 185, 129, 0.14); box-shadow: none; cursor: default; }
+#smartSearchPage .si-ai-note { margin-top: 10px; font-size: 0.76rem; color: var(--si-text-secondary); }
+#smartSearchPage .si-ai-text p { margin: 0 0 8px; color: var(--si-text); }
+#smartSearchPage .si-ai-list { margin: 0 0 8px; padding-left: 20px; color: var(--si-text); }
+#smartSearchPage .si-ai-list li { margin: 3px 0; }
+#smartSearchPage .si-tt-table td, #smartSearchPage .si-tt-table th { text-align: center; }
+
+@media (max-width: 600px) {
+    #smartSearchPage .si-msg-images img { width: 96px; height: 120px; }
+    #smartSearchPage .si-ai-act { flex: 1 1 calc(50% - 8px); justify-content: center; }
+    /* the timetable grid reads better as a real grid than as cards */
+    #smartSearchPage .si-tt-table { display: table !important; width: 100%; font-size: 0.78rem; }
+    #smartSearchPage .si-tt-table thead { display: table-header-group !important; }
+    #smartSearchPage .si-tt-table tbody { display: table-row-group !important; }
+    #smartSearchPage .si-tt-table tr { display: table-row !important; padding: 0; border: none; margin: 0; background: transparent; }
+    #smartSearchPage .si-tt-table td, #smartSearchPage .si-tt-table th { display: table-cell !important; padding: 6px 3px !important; border-bottom: 1px solid var(--si-border) !important; text-align: center !important; }
+    #smartSearchPage .si-tt-table td:first-child { grid-column: auto; border-bottom: 1px solid var(--si-border) !important; font-size: 0.78rem; }
+    #smartSearchPage .si-tt-table .si-td-label { display: none !important; }
+}
