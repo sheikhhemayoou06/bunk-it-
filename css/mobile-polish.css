@@ -1,0 +1,326 @@
+/* ============================================================
+   MOBILE POLISH — loaded last; phones and small tablets only
+   ============================================================ */
+
+/* Always: the class editor's active step used an undefined colour (white on white) */
+:root {
+    --primary-color: #4f46e5;
+}
+
+/* Always: wizard timetable-mode options are a row (icon + text), never stacked */
+.wiz-tt-mode,
+.form-group label.wiz-tt-mode {
+    display: flex !important;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+@media (max-width: 760px) {
+    /* ---------- Global ---------- */
+    html, body {
+        overflow-x: hidden;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /* 16px inputs: iOS won't zoom the page on focus */
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+
+    button, .btn, a.btn {
+        min-height: 40px;
+        touch-action: manipulation;
+    }
+
+    img, svg, video, canvas, table {
+        max-width: 100%;
+    }
+
+    /* ---------- Pop-ups become bottom sheets ---------- */
+    .modal {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    .modal .modal-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        max-height: 92dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 22px 22px 0 0 !important;
+        padding: 22px 18px calc(18px + env(safe-area-inset-bottom)) !important;
+        box-sizing: border-box;
+        animation: mpSheetUp 0.28s cubic-bezier(.2, .8, .2, 1);
+    }
+
+    .modal .modal-content::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        margin: -10px auto 14px;
+        border-radius: 999px;
+        background: rgba(100, 116, 139, 0.35);
+    }
+
+    .modal .modal-close {
+        top: 12px !important;
+        right: 12px !important;
+    }
+
+    .modal .modal-header h2 {
+        font-size: 1.25rem;
+    }
+
+    /* ---------- Class editor (wizard) ---------- */
+    .modal-tabs {
+        display: flex !important;
+        overflow-x: auto;
+        gap: 6px;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .modal-tabs button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        padding: 9px 14px !important;
+        font-size: 0.85rem !important;
+        border-radius: 999px !important;
+    }
+
+    .wizard-progress {
+        justify-content: space-between !important;
+        gap: 6px !important;
+    }
+
+    .wizard-progress .wizard-step {
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
+        padding: 8px 6px !important;
+        font-size: 0.78rem !important;
+        white-space: nowrap;
+    }
+
+    .wiz-tt-mode {
+        padding: 10px !important;
+        gap: 10px !important;
+    }
+
+    .wiz-tt-text small {
+        line-height: 1.35;
+    }
+
+    #wizTimetableGrid,
+    #wizSubjectsContainer {
+        max-height: none !important;
+    }
+
+    /* ---------- Old attendance / calculator screen ---------- */
+    #attendancePage > .header {
+        padding: 18px 16px 16px !important;
+        border-radius: 0 0 22px 22px;
+    }
+
+    #attendancePage > .header h1 {
+        font-size: 1.6rem !important;
+        margin: 0;
+    }
+
+    #attendancePage > .header .header-subtitle {
+        font-size: 0.88rem !important;
+        margin-top: 2px !important;
+    }
+
+    #attendancePage > .header .info-slider {
+        display: none !important;
+    }
+
+    .class-selector-header {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .class-selector-header h3 {
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .class-selector-header .header-actions {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px !important;
+    }
+
+    .class-selector-header .header-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 10px 6px !important;
+        font-size: 0.8rem !important;
+        border-radius: 12px !important;
+        box-shadow: none;
+        white-space: nowrap;
+    }
+
+    .class-selector-header .header-actions .secondary-btn {
+        background: var(--card-bg, #fff) !important;
+        color: var(--dark-text, #1a1f36) !important;
+        border: 1px solid var(--border-color, #e5e7eb) !important;
+    }
+
+    /* The dropdown already selects the class; the search box duplicates it on phones */
+    .class-search-wrapper {
+        display: none;
+    }
+
+    .class-dropdown {
+        border-radius: 14px !important;
+    }
+
+    /* Upload card buttons: one primary, two clean outlines */
+    .upload-btn-group {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        width: 100%;
+        max-width: 280px;
+        margin: 0 auto;
+    }
+
+    .upload-btn-group .btn {
+        width: 100%;
+        margin: 0 !important;
+        border-radius: 12px !important;
+    }
+
+    .upload-btn-group .secondary-btn {
+        background: transparent !important;
+        color: var(--dark-text, #1a1f36) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+        box-shadow: none !important;
+    }
+
+    /* ---------- Timetable page: whole week fits ---------- */
+    #timetablePage .tm-grid {
+        font-size: 0.72rem;
+    }
+
+    #timetablePage .tm-grid th {
+        padding: 8px 2px;
+        font-size: 0.62rem;
+        letter-spacing: 0;
+    }
+
+    #timetablePage .tm-grid td {
+        padding: 4px 2px;
+    }
+
+    #timetablePage .tm-pnum {
+        width: 26px;
+    }
+
+    #timetablePage .tm-chip {
+        min-width: 0;
+        width: 100%;
+        padding: 6px 2px;
+        font-size: 0.68rem;
+        border-radius: 7px;
+        box-sizing: border-box;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ---------- Smart Search: compact stat tiles in one row ---------- */
+    #smartSearchPage .si-stats-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 8px;
+    }
+
+    #smartSearchPage .si-stat-tile {
+        padding: 10px 10px;
+        border-radius: 12px;
+        min-width: 0;
+    }
+
+    #smartSearchPage .si-stat-value {
+        font-size: 1.15rem;
+        letter-spacing: -0.3px;
+    }
+
+    #smartSearchPage .si-stat-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.3px;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+    #smartSearchPage .si-subject-table td:first-child,
+    #smartSearchPage .si-subject-table th:first-child {
+        white-space: normal;
+        min-width: 112px;
+        position: sticky;
+        left: 0;
+        background: var(--si-surface);
+        z-index: 1;
+    }
+
+    #smartSearchPage .si-subject-table td,
+    #smartSearchPage .si-subject-table th {
+        padding: 9px 8px;
+    }
+
+    #smartSearchPage .si-answer-title {
+        font-size: 0.98rem;
+    }
+
+    #smartSearchPage .si-answer-body {
+        font-size: 0.88rem;
+    }
+
+    #smartSearchPage .si-answer-footer {
+        gap: 6px;
+    }
+
+    #smartSearchPage .si-answer-footer > span:not(.si-footer-spacer) {
+        display: none;
+    }
+
+    /* ---------- My Portal ---------- */
+    #studentPortalPage .ams-container,
+    #studentPortalPage .ams-menu-card {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 380px) {
+    .class-selector-header .header-actions .btn {
+        font-size: 0.74rem !important;
+    }
+
+    #smartSearchPage .si-stat-value {
+        font-size: 1.02rem;
+    }
+}
+
+@keyframes mpSheetUp {
+    from { transform: translateY(40px); opacity: 0.6; }
+    to { transform: none; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .modal .modal-content { animation: none; }
+}

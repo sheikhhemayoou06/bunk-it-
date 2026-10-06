@@ -6378,6 +6378,7 @@
     <link rel="stylesheet" href="css/subjects-page.css?v=4">
     <link rel="stylesheet" href="css/day-check.css?v=8">
     <link rel="stylesheet" href="css/onboarding.css?v=1">
+    <link rel="stylesheet" href="css/mobile-polish.css?v=2">
 </head>
 
 <body>
@@ -9013,7 +9014,11 @@
                         periodTimes: classData.periodTimes || {}, // Import period times if available
 
                         // CRITICAL: Preserve local configs (Portal Mode & Mass Bunk ID)
-                        portalSetup: classData.portalSetup || oldPortalSetup || {},
+                        // + the semester start the link carries, so attendance runs start → end
+                        portalSetup: {
+                            ...(classData.portalSetup || oldPortalSetup || {}),
+                            ...(classData.startDate && !(oldPortalSetup?.semesterStartDate) ? { semesterStartDate: classData.startDate } : {})
+                        },
                         sharedId: classData.sharedId || oldSharedId,
 
                         updatedAt: Date.now() // Add timestamp for sync priority
@@ -9023,6 +9028,8 @@
                     if (classData.timetable) {
                         localStorage.setItem(`timetable_arrangement_${finalName}`, JSON.stringify(classData.timetable));
                     }
+                    // Dated timetable versions: old timetable for old days, new one after it changed
+                    if (classData.timetableHistory) saveImportedTimetableHistory(finalName, unpackTimetableHistory(classData.timetableHistory));
 
                     // FIX: Save period times if present (using canonical snake_case key)
                     if (classData.periodTimes) {
@@ -14001,6 +14008,7 @@ ${subjectLines.join('\n')}
                     if (classData.timetable && Object.keys(classData.timetable).length > 0) {
                         localStorage.setItem(`timetable_arrangement_${finalName}`, JSON.stringify(classData.timetable));
                     }
+                    if (classData.timetableHistory) saveImportedTimetableHistory(finalName, unpackTimetableHistory(classData.timetableHistory));
 
                     // Use saveToStorage for proper sync trigger (not raw localStorage)
                     if (typeof saveToStorage === 'function') {
@@ -21637,6 +21645,7 @@ RULES:
 
                         classData = {
                             name: rawData.t,
+                            timetableHistory: unpackTimetableHistory(rawData.th),
                             startDate: rawData.sd ? expandDate(rawData.sd) : '',
                             lastDate: expandDate(rawData.ld),
                             subjects: processedSubjects,
@@ -21862,6 +21871,9 @@ RULES:
                         }
                     }
 
+                    // Dated timetable versions from the QR: each day uses the timetable it really had
+                    if (classData.timetableHistory) saveImportedTimetableHistory(newName, classData.timetableHistory);
+
                     populateClassSelector();
 
                     // Select the new class
@@ -21877,6 +21889,49 @@ RULES:
                 }
             }
 
+            // ---- Timetable history in QR codes / links ----
+            // Arrangement packed as days "|" and periods "," (empty = free): "MATH,PHY|,CS|…"
+            function packArrangement(arr) {
+                return [0, 1, 2, 3, 4, 5, 6].map(d => (arr?.[d] || []).map(it => (it && typeof it === 'object' ? it.code : it) || '').join(',')).join('|');
+            }
+            function unpackArrangement(str) {
+                const out = {};
+                String(str || '').split('|').forEach((day, d) => {
+                    if (d > 6) return;
+                    const periods = day === '' ? [] : day.split(',').map(c => c || null);
+                    while (periods.length && periods[periods.length - 1] === null) periods.pop();
+                    out[d] = periods;
+                });
+                return out;
+            }
+            // Only worth sending when the timetable changed at least once
+            function packTimetableHistory(className) {
+                const hist = typeof getTimetableHistory === 'function' ? getTimetableHistory(className) : [];
+                if (!Array.isArray(hist) || hist.length < 2) return null;
+                const c = (d) => d ? d.replace(/-/g, '').slice(2) : '';
+                return hist.map(v => ({ f: v.effectiveFrom <= '2000-01-01' ? '' : c(v.effectiveFrom), t: c(v.effectiveTo), a: packArrangement(v.arrangement) }));
+            }
+            function unpackTimetableHistory(packed) {
+                if (!Array.isArray(packed) || !packed.length) return null;
+                const e = (d) => d && d.length === 6 ? `20${d.slice(0, 2)}-${d.slice(2, 4)}-${d.slice(4, 6)}` : null;
+                return packed.map(v => ({ effectiveFrom: e(v.f) || '2000-01-01', effectiveTo: e(v.t), arrangement: unpackArrangement(v.a), savedAt: new Date().toISOString() }))
+                    .sort((x, y) => x.effectiveFrom.localeCompare(y.effectiveFrom));
+            }
+            // Store an imported history and make "current" the version in effect today
+            function saveImportedTimetableHistory(className, history) {
+                if (!Array.isArray(history) || history.length < 2) return false;
+                const clean = history.filter(v => v && v.effectiveFrom && v.arrangement);
+                if (clean.length < 2) return false;
+                localStorage.setItem(`timetable_history_${className}`, JSON.stringify(clean));
+                const today = formatLocalDate(new Date());
+                const active = clean.find(v => today >= v.effectiveFrom && (!v.effectiveTo || today <= v.effectiveTo)) || clean[clean.length - 1];
+                localStorage.setItem(`timetable_arrangement_${className}`, JSON.stringify(active.arrangement));
+                return true;
+            }
+            window.packTimetableHistory = packTimetableHistory;
+            window.unpackTimetableHistory = unpackTimetableHistory;
+            window.saveImportedTimetableHistory = saveImportedTimetableHistory;
+
             // Builds the compact class payload read by the in-app QR scanner
             // t=title, sd=semesterStartDate(YYMMDD), ld=lastDate(YYMMDD), h=holidays, s=subjects (n, sn, c, sch "1|1,2|0|...")
             function buildClassQRPayload(className) {
@@ -21885,10 +21940,12 @@ RULES:
                 const arrangement = getTimetableArrangement(className);
                 const compressDate = (dateStr) => dateStr ? dateStr.replace(/-/g, '').slice(2) : '';
 
+                const th = packTimetableHistory(className);
                 return JSON.stringify({
                     t: className,
                     sd: compressDate(classData.portalSetup?.semesterStartDate || classData.startDate),
                     ld: compressDate(classData.lastDate),
+                    ...(th ? { th } : {}),
                     h: (classData.holidays || []).map(compressDate),
                     s: classData.subjects.map((subject) => {
                         const scheduleArr = [0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
@@ -22007,9 +22064,12 @@ RULES:
 
                 const compressDate = (dateStr) => dateStr ? dateStr.replace(/-/g, '').slice(2) : '';
 
+                const thCopy = packTimetableHistory(editingClassName);
                 const minifiedData = {
                     t: editingClassName,
+                    sd: compressDate(classData.portalSetup?.semesterStartDate || classData.startDate),
                     ld: compressDate(classData.lastDate),
+                    ...(thCopy ? { th: thCopy } : {}),
                     h: (classData.holidays || []).map(compressDate),
                     s: classData.subjects.map(subject => ({
                         n: subject.name,
@@ -22046,7 +22106,9 @@ RULES:
                     holidays: currentClass.holidays || [],
                     timetable: getTimetableArrangement(editingClassName) || {},
                     periodTimes: currentClass.periodTimes || {},
-                    lastDate: currentClass.lastDate || ''
+                    startDate: currentClass.portalSetup?.semesterStartDate || currentClass.startDate || '',
+                    lastDate: currentClass.lastDate || '',
+                    timetableHistory: packTimetableHistory(editingClassName) || undefined
                 };
 
                 // Compression v2
@@ -23961,7 +24023,9 @@ RULES:
                         // Prepare class data (clean structure)
                         const classData = {
                             name: shareName || src.name,
+                            startDate: src.portalSetup?.semesterStartDate || src.startDate || '',
                             lastDate: src.lastDate, // Added for strict duplicate check
+                            timetableHistory: packTimetableHistory(shareName || src.name) || undefined,
                             subjects: src.subjects || [],
                             holidays: src.holidays || [],
                             timetable: getTimetableArrangement(shareName || src.name) || src.timetable || {},
