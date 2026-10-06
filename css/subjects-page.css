@@ -449,3 +449,22 @@ body.dark-mode .sp-pill-warning { color: var(--sp-warning); }
     .sp-card { animation: none; }
     .sp-bar-fill { transition: none; }
 }
+
+/* Original / With OD/ML switch (summary now has 4 items) */
+@media (min-width: 521px) {
+    .sp-summary {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 520px) {
+    .sp-summary-item:last-child {
+        grid-column: auto;
+    }
+}
+
+.sp-odml-switch {
+    display: flex;
+    justify-content: flex-end;
+    margin: -4px 0 12px;
+}

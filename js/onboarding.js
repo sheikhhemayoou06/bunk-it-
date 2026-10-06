@@ -141,12 +141,35 @@
         `, 1);
     }
 
+    function hasClass() {
+        return typeof window.hasAnyClass === 'function' ? window.hasAnyClass()
+            : (typeof classes !== 'undefined' && Object.keys(classes).length > 0);
+    }
+
+    // After a setup window closes without a class: remind (banner + toast)
+    let watchTimer = null;
+    function watchSetupWindow() {
+        clearInterval(watchTimer);
+        let sawOpen = false;
+        const started = Date.now();
+        watchTimer = setInterval(() => {
+            if (hasClass()) { clearInterval(watchTimer); if (typeof renderClassReminder === 'function') renderClassReminder(); return; }
+            const open = !!document.querySelector('.modal.active, .modal[style*="flex"], .modal[style*="block"], #qrScanModal.open, #onboarding.ob-open');
+            if (open) { sawOpen = true; return; }
+            if (!sawOpen && Date.now() - started < 3000) return; // window still opening
+            clearInterval(watchTimer);
+            if (typeof renderClassReminder === 'function') renderClassReminder();
+            if (typeof showToast === 'function') showToast('No class yet', 'Your class isn\'t set up — tap "Set up class" on Home when you\'re ready.', { duration: 4500 });
+        }, 700);
+    }
+
     function pick(action) {
         if (action === 'shot') {
             document.getElementById('obShotInput')?.click();
             return;
         }
         finish();
+        if (action !== 'example') setTimeout(watchSetupWindow, 400);
         setTimeout(() => {
             if (action === 'create' && typeof openAddClassModal === 'function') openAddClassModal();
             if (action === 'ai' && typeof openAddClassModal === 'function') {
@@ -170,6 +193,13 @@
         else classStep();
         document.body.classList.add('ob-lock');
         requestAnimationFrame(() => el.classList.add('ob-open'));
+
+        // A class arrived meanwhile (cloud sync, share link): close quietly
+        clearInterval(start.timer);
+        start.timer = setInterval(() => {
+            if (!document.getElementById('onboarding')?.classList.contains('ob-open')) { clearInterval(start.timer); return; }
+            if (!opts.pendingImport && hasClass()) { clearInterval(start.timer); finish(); }
+        }, 1000);
     }
 
     function finish() {
@@ -182,8 +212,11 @@
     }
 
     function later() {
+        // Snooze for this visit only — it comes back next time while there's no class
+        try { sessionStorage.setItem('ob_snoozed', '1'); } catch (e) { /* ignore */ }
         finish();
-        if (typeof showToast === 'function') showToast('Set up any time', 'Tap ＋ Add Class on the Attendance screen when you\'re ready.', { duration: 4500 });
+        if (typeof renderClassReminder === 'function') renderClassReminder();
+        if (typeof showToast === 'function') showToast('Set up any time', 'We\'ll remind you until your class is set up. Tap "Set up class" on Home.', { duration: 4500 });
     }
 
     document.addEventListener('keydown', (e) => {

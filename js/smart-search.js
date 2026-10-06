@@ -52,11 +52,36 @@
     function getAttendanceData() {
         // First try the already-computed data
         if (typeof currentAnalysisData !== 'undefined' && currentAnalysisData.length > 0) {
-            return currentAnalysisData;
+            // The main calculation counts "remaining" from the day after its current date.
+            // When that date is today, today's not-yet-marked classes belong in remaining too.
+            const calcDate = document.getElementById('currentDate')?.value;
+            if (calcDate && calcDate !== formatLocalDateSI(new Date())) return currentAnalysisData;
+            const pending = todayPendingCounts(getSelectedClassObj());
+            return currentAnalysisData.map(sub => ({ ...sub, remaining: (Number(sub.remaining) || 0) + (pending[sub.code] || 0) }));
         }
 
-        // Auto-compute from selectedClass + portal/logs
+        // Auto-compute from selectedClass + portal/logs (already includes today's unmarked classes)
         return autoComputeAttendanceData();
+    }
+
+    // Classes scheduled today that haven't been marked yet, per subject
+    function todayPendingCounts(cls) {
+        const out = {};
+        if (!cls || !cls.subjects) return out;
+        const todayStr = formatLocalDateSI(new Date());
+        const counts = classesOnDate(cls, todayStr);
+        let marked = {};
+        try {
+            const dayLog = JSON.parse(localStorage.getItem('attendance_logs') || '{}')[todayStr] || {};
+            Object.keys(dayLog).forEach(key => {
+                if (dayLog[key] && dayLog[key] !== 'Default') {
+                    const code = key.split('_p')[0];
+                    marked[code] = (marked[code] || 0) + 1;
+                }
+            });
+        } catch (e) { marked = {}; }
+        Object.keys(counts).forEach(code => { out[code] = Math.max(0, counts[code] - (marked[code] || 0)); });
+        return out;
     }
 
     function autoComputeAttendanceData() {
@@ -105,6 +130,8 @@
             return count;
         }
 
+        const pendingToday = todayPendingCounts(cls);
+
         if (isPortalMode) {
             // Portal Mode: baseline + logs
             const baseline = cls.portalSetup.baselineData || {};
@@ -145,14 +172,14 @@
                 const logAdd = logStats[subject.code] || { attended: 0, total: 0, odml: 0 };
                 const attended = (base.attended || 0) + logAdd.attended;
                 const totalHeld = (base.total || 0) + logAdd.total;
-                const remaining = countRemaining(subject.schedule, subject.code);
+                const remaining = countRemaining(subject.schedule, subject.code) + (pendingToday[subject.code] || 0);
 
                 results.push({
                     ...subject,
                     attended,
                     totalHeld,
                     remaining,
-                    odml: logAdd.odml,
+                    odml: Math.min(attended, (Number(base.odml) || 0) + logAdd.odml),
                     initialAttended: base.attended || 0,
                     initialTotal: base.total || 0
                 });
@@ -172,7 +199,7 @@
                     const s = String(status || '').toUpperCase().trim();
                     const isPresent = status === 'Attended' || status === 'Present' ||
                         status === 'Duty Leave (OD)' || status === 'Medical Leave (ML)' ||
-                        s === 'P' || s === 'PRESENT' || s === 'ATTENDED';
+                        s === 'P' || s === 'PRESENT' || s === 'ATTENDED' || s === 'ML' || s === 'OD';
                     const isAbsent = status === 'Skipped' || status === 'Absent' ||
                         s === 'A' || s === 'ABSENT' || s === 'SKIPPED';
                     if (isPresent) {
@@ -186,19 +213,21 @@
             });
 
             cls.subjects.forEach(subject => {
-                const baseAttended = Number(subject.initialAttended || subject.attended || 0);
-                const baseTotal = Number(subject.initialTotal || subject.totalHeld || 0);
+                // Same base numbers as the main calculation (0 is a real value, not "missing")
+                const baseAttended = Number(subject.initialAttended ?? subject.attended) || 0;
+                const baseTotal = Number(subject.initialTotal ?? subject.totalHeld) || 0;
+                const baseOdml = Number(subject.initialOdml ?? 0) || 0;
                 const logAdd = logStats[subject.code] || { attended: 0, total: 0, odml: 0 };
                 const attended = baseAttended + logAdd.attended;
                 const totalHeld = baseTotal + logAdd.total;
-                const remaining = countRemaining(subject.schedule, subject.code);
+                const remaining = countRemaining(subject.schedule, subject.code) + (pendingToday[subject.code] || 0);
 
                 results.push({
                     ...subject,
                     attended,
                     totalHeld,
                     remaining,
-                    odml: logAdd.odml,
+                    odml: Math.min(attended, baseOdml + logAdd.odml),
                     initialAttended: baseAttended,
                     initialTotal: baseTotal
                 });
@@ -296,10 +325,16 @@
 
     // "75.0%" with the original % underneath when OD/ML changes it
     function pctCell(pair, hasOdml, color) {
-        const main = `<strong${color ? ` style="color:${color};"` : ''}>${pair.withOd.toFixed(1)}%</strong>`;
-        if (!(hasOdml && Math.abs(pair.withOd - pair.own) > 0.05)) return main;
-        const low = pair.eligible === false;
-        return `${main}<br><small style="${low ? 'color:var(--si-danger, #ef4444);font-weight:700;' : 'opacity:0.75;'}">own ${pair.own.toFixed(1)}%${low ? ` (below ${pair.ownMin}%)` : ''}</small>`;
+        const st = color ? ` style="color:${color};"` : '';
+        const low = hasOdml && pair.eligible === false;
+        const withHtml = `<strong${st}>${pair.withOd.toFixed(1)}%</strong>${low ? `<br><small style="color:var(--si-danger, #ef4444);font-weight:700;">own below ${pair.ownMin}%</small>` : ''}`;
+        // The Original / With OD/ML switch shows one of them
+        return `<span class="odv-with">${withHtml}</span><span class="odv-orig"><strong${st}>${pair.own.toFixed(1)}%</strong></span>`;
+    }
+
+    // Same idea for a plain number pair
+    function pctPairHtml(withPct, ownPct) {
+        return `<span class="odv-with">${withPct.toFixed(1)}%</span><span class="odv-orig">${ownPct.toFixed(1)}%</span>`;
     }
 
     function analyzeSubject(sub, minCriteria) {
@@ -582,8 +617,10 @@
         // Today's classes count as "upcoming" only if today isn't logged yet
         let logs = {};
         try { logs = JSON.parse(localStorage.getItem('attendance_logs') || '{}'); } catch (e) { }
-        const todayLogged = logs[todayStr] && Object.keys(logs[todayStr]).length > 0;
-        const windowStart = todayLogged ? formatLocalDateSI(addDays(new Date(todayStr + 'T00:00:00'), 1)) : todayStr;
+        // Today's classes that are already marked are in the attendance numbers; the rest are upcoming
+        const pendingToday = todayPendingCounts(cls);
+        const todayHasPending = Object.values(pendingToday).some(n => n > 0);
+        const windowStart = todayHasPending ? todayStr : formatLocalDateSI(addDays(new Date(todayStr + 'T00:00:00'), 1));
         const endStr = cls.lastDate || parsed.dates[parsed.dates.length - 1];
 
         const pastDates = parsed.dates.filter(d => d < windowStart);
@@ -600,7 +637,7 @@
         const noClassDays = [];
         for (let d = new Date(windowStart + 'T00:00:00'); formatLocalDateSI(d) <= endStr; d = addDays(d, 1)) {
             const ds = formatLocalDateSI(d);
-            const counts = classesOnDate(cls, ds);
+            const counts = ds === todayStr ? pendingToday : classesOnDate(cls, ds);
             const total = Object.values(counts).reduce((a, b) => a + b, 0);
             if (leaveSet.has(ds)) (total > 0 ? classDays : noClassDays).push(ds);
             Object.keys(counts).forEach(code => {
@@ -641,6 +678,7 @@
 
         let totM = 0, totHeldNow = 0, totPresNow = 0, totEffNow = 0;
         let totHeldAfter = 0, totPresAfter = 0, totEffAfter = 0, totF = 0, totPresFinal = 0, totEffFinal = 0;
+        let totHeldBy = 0, totPresBy = 0, totEffBy = 0;
         let atRisk = 0;
         const rows = data.filter(sub => per[sub.code].m > 0 || !onlySubs.length).map(sub => {
             const c = countsOf(sub);
@@ -648,12 +686,15 @@
             const { R, m, b } = per[sub.code];
             const F = T + R;
             totM += m;
-            // Now / right after the leave (attending every class before it) / semester end (attending the rest)
+            // Now / after skipping (only the leave days added as absent) / semester end (attending the rest)
             const now = pctPair(c.present, c.odml, T, F);
-            const after = pctPair(c.present + b, c.odml, T + b + m, F);
+            const after = pctPair(c.present, c.odml, T + m, F);
+            // Same, if every class before the leave is attended first (only differs when the leave isn't next)
+            const byThen = pctPair(c.present + b, c.odml, T + b + m, F);
+            totPresBy += c.present + b; totHeldBy += T + b + m; totEffBy += byThen.withOd / 100 * (T + b + m);
             const fin = pctPair(c.present + R - m, c.odml, F, F);
             totHeldNow += T; totPresNow += c.present; totEffNow += now.withOd / 100 * T;
-            totHeldAfter += T + b + m; totPresAfter += c.present + b; totEffAfter += after.withOd / 100 * (T + b + m);
+            totHeldAfter += T + m; totPresAfter += c.present; totEffAfter += after.withOd / 100 * (T + m);
             totF += F; totPresFinal += c.present + R - m; totEffFinal += fin.withOd / 100 * F;
             const current = now.withOd, afterBreak = after.withOd, finalPct = fin.withOd;
             // Classes you can still miss (shared rule: OD/ML allowance + own-attendance minimum)
@@ -685,6 +726,8 @@
         const ownNow = totHeldNow ? (totPresNow / totHeldNow) * 100 : 0;
         const ownAfter = totHeldAfter ? (totPresAfter / totHeldAfter) * 100 : 0;
         const ownFinal = totF ? (totPresFinal / totF) * 100 : 0;
+        const overallBy = totHeldBy ? (totEffBy / totHeldBy) * 100 : 0;
+        const classesBefore = totHeldBy - totHeldAfter;
         const anyOd = data.some(sub => countsOf(sub).odml > 0);
         const safe = atRisk === 0;
 
@@ -699,28 +742,28 @@
                         <div class="si-stat-label">Classes missed (${classDays.length} day${classDays.length > 1 ? 's' : ''})</div>
                     </div>
                     <div class="si-stat-tile">
-                        <div class="si-stat-value ${overallAfter >= minPercent ? 'safe' : 'danger'}">${overallAfter.toFixed(1)}%</div>
-                        <div class="si-stat-label">Right after leave${anyOd ? `<br>own ${ownAfter.toFixed(1)}%` : ''}</div>
+                        <div class="si-stat-value ${overallAfter >= minPercent ? 'safe' : 'danger'}">${pctPairHtml(overallAfter, ownAfter)}</div>
+                        <div class="si-stat-label">After skipping</div>
                     </div>
                     <div class="si-stat-tile">
-                        <div class="si-stat-value ${overallFinal >= minPercent ? 'safe' : 'danger'}">${overallFinal.toFixed(1)}%</div>
-                        <div class="si-stat-label">Semester end*${anyOd ? `<br>own ${ownFinal.toFixed(1)}%` : ''}</div>
+                        <div class="si-stat-value ${overallFinal >= minPercent ? 'safe' : 'danger'}">${pctPairHtml(overallFinal, ownFinal)}</div>
+                        <div class="si-stat-label">Semester end*</div>
                     </div>
                 </div>
                 <p style="margin-top:14px;">
                     Taking leave on <strong>${rangeLabel}</strong>${onlySubs.length ? ` (only ${onlySubs.map(s => s.name || s.code).join(', ')})` : ''} means missing
                     <strong>${totM}</strong> class${totM !== 1 ? 'es' : ''} across ${classDays.length} class day${classDays.length > 1 ? 's' : ''}.
-                    Overall attendance goes from <strong>${overallNow.toFixed(1)}%</strong> now to <strong>${overallAfter.toFixed(1)}%</strong> right after the leave
-                    (if you attend every class until then).
+                    Overall attendance goes from <strong>${overallNow.toFixed(1)}%</strong> now to <strong>${overallAfter.toFixed(1)}%</strong> with those classes marked absent.
+                    ${classesBefore > 0 ? `If you attend the ${classesBefore} class${classesBefore !== 1 ? 'es' : ''} before the leave first, you'd be at <strong>${overallBy.toFixed(1)}%</strong> right after it.` : ''}
                     ${safe
                         ? `<span style="color:var(--si-success, #10b981);font-weight:600;">All subjects can still finish at or above ${minPercent}%.</span>`
                         : `<span style="color:var(--si-danger, #ef4444);font-weight:600;">${atRisk} subject${atRisk > 1 ? 's' : ''} cannot reach ${minPercent}% by semester end after this leave.</span>`}
                 </p>
                 <table class="si-subject-table">
-                    <thead><tr><th>Subject</th><th>Missed</th><th>Now</th><th>After leave</th><th>Sem end*</th><th>Skips left</th></tr></thead>
+                    <thead><tr><th>Subject</th><th>Missed</th><th>Now</th><th>After skipping</th><th>Sem end*</th><th>Skips left</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
-                <p style="font-size:0.78rem;margin-top:8px;opacity:0.75;">* Semester end % assumes you attend every other class until ${fmtShort(endStr)}. "Skips left" = classes you can still miss after this leave and stay at ${minPercent}%.${anyOd ? ` Big % = with OD/ML under your college rule; "own" = classes you actually attended.` : ''}</p>
+                <p style="font-size:0.78rem;margin-top:8px;opacity:0.75;">* Semester end % assumes you attend every other class until ${fmtShort(endStr)}. "Skips left" = classes you can still miss after this leave and stay at ${minPercent}%.${anyOd ? `<span class="odv-both"> Use the With OD/ML · Original switch at the top to change which % is shown.</span>` : ''}</p>
                 ${!safe || examHits.length ? betterDaysHtml(cls, data, leaveSet) : ''}
                 ${notesHtml}
             `
@@ -951,6 +994,46 @@
 
     // --- Query Handlers ---
 
+    // Next N upcoming classes from now (today's unmarked first), per subject code
+    function nextClassesToMiss(cls, data, n, onlyCodes) {
+        const out = {};
+        if (!cls || n <= 0) return out;
+        const todayStr = formatLocalDateSI(new Date());
+        const end = cls.lastDate || formatLocalDateSI(addDays(new Date(), 180));
+        const pending = todayPendingCounts(cls);
+        const className = document.getElementById('classSelector')?.value || cls.name;
+        let left = n;
+        for (let d = new Date(todayStr + 'T00:00:00'); left > 0 && formatLocalDateSI(d) <= end; d = addDays(d, 1)) {
+            const ds = formatLocalDateSI(d);
+            // Period order for the day so "next" really means next
+            let order = [];
+            if (typeof getPeriodsForDate === 'function') {
+                try { order = (getPeriodsForDate(ds) || []).map(p => (typeof p === 'object' ? p.code : p)).filter(Boolean); } catch (e) { order = []; }
+            }
+            const counts = ds === todayStr ? { ...pending } : classesOnDate(cls, ds);
+            const fromPeriods = order.length > 0;
+            if (!fromPeriods) Object.keys(counts).forEach(code => { for (let i = 0; i < counts[code]; i++) order.push(code); });
+            const avail = { ...counts };
+            if (ds === todayStr && fromPeriods) {
+                // Skip today's periods that are already marked (they come first in the day)
+                const full = classesOnDate(cls, ds);
+                const done = {};
+                Object.keys(full).forEach(code => { done[code] = full[code] - (pending[code] || 0); });
+                order = order.filter(code => { if ((done[code] || 0) > 0) { done[code]--; return false; } return true; });
+            }
+            for (const code of order) {
+                if (left <= 0) break;
+                if (!(avail[code] > 0)) continue;
+                if (onlyCodes.length && !onlyCodes.includes(code)) continue;
+                if (!data.some(x => x.code === code)) continue;
+                avail[code]--;
+                out[code] = (out[code] || 0) + 1;
+                left--;
+            }
+        }
+        return out;
+    }
+
     function handleMissImpact(query, match) {
         const data = getAttendanceData();
         if (!data.length) return noDataResponse();
@@ -969,6 +1052,13 @@
         let effNow = 0, effNew = 0, heldNew = 0;
         let subjectsAffected = 0;
 
+        // "Miss the next N classes": take the next N classes in timetable order,
+        // or the next N of one subject when it is named ("miss 5 maths classes")
+        const cls = getSelectedClassObj();
+        const onlySubs = findSubjectsInQuery(query.replace(/\d+/g, ' '), data);
+        const missBy = nextClassesToMiss(cls, data, numMiss, onlySubs.map(x => x.code));
+        const missedTotal = Object.values(missBy).reduce((a, b) => a + b, 0);
+
         data.forEach(sub => {
             const s = analyzeSubject(sub, minCriteria);
             const c = countsOf(sub);
@@ -976,8 +1066,7 @@
             totalHeld += s.totalHeld;
             totalRemaining += s.remaining;
 
-            const classesPerDay = sub.schedule ? sub.schedule.reduce((sum, v) => sum + parseScheduleVal(v), 0) / 7 : 1;
-            const missForSubject = Math.round(numMiss * (classesPerDay > 0 ? classesPerDay / data.reduce((a, b) => a + (b.schedule ? b.schedule.reduce((s, v) => s + parseScheduleVal(v), 0) / 7 : 1), 0) : 1 / data.length) * data.length);
+            const missForSubject = missBy[sub.code] || 0;
 
             const newTotal = s.totalHeld + missForSubject;
             // Missing classes: present and OD/ML stay the same, held grows
@@ -994,7 +1083,7 @@
             if (!ok) subjectsAffected++;
 
             subjectRows += `<tr>
-                <td><strong>${sub.name || sub.code}</strong></td>
+                <td><strong>${sub.name || sub.code}</strong><br><small style="opacity:0.7;">${missForSubject} missed</small></td>
                 <td>${pctCell(nowPair, c.odml > 0)}</td>
                 <td>${pctCell(newPair, c.odml > 0)}</td>
                 <td><span class="si-badge ${status}">${drop > 0 ? '↓' : '→'} ${drop.toFixed(1)}%</span></td>
@@ -1009,7 +1098,7 @@
         return {
             icon: subjectsAffected > 0 ? '⚠️' : '✅',
             iconClass: subjectsAffected > 0 ? 'warning' : 'safe',
-            title: `Impact of Missing ${numMiss} Classes`,
+            title: `Impact of Missing ${missedTotal} Class${missedTotal !== 1 ? 'es' : ''}`,
             body: `
                 <div class="si-stats-grid">
                     <div class="si-stat-tile">
@@ -1025,7 +1114,7 @@
                         <div class="si-stat-label">At Risk</div>
                     </div>
                 </div>
-                <p style="margin-top:14px;">If you miss the next <strong>${numMiss}</strong> classes, your overall attendance drops from <strong>${overallCurrent.toFixed(1)}%</strong> to <strong>${overallNew.toFixed(1)}%</strong>. ${subjectsAffected > 0 ? `<span style="color:var(--si-danger);font-weight:600;">${subjectsAffected} subject${subjectsAffected !== 1 ? 's' : ''} at risk: below ${minPercent}%, or own attendance below the medical minimum (then OD/ML stops counting).</span>` : `You'll still be above the ${minPercent}% threshold.`}</p>
+                <p style="margin-top:14px;">If you miss the next <strong>${missedTotal}</strong>${onlySubs.length ? ` ${onlySubs.map(x => x.name || x.code).join(', ')}` : ''} class${missedTotal !== 1 ? 'es' : ''}${missedTotal < numMiss ? ` (only ${missedTotal} left this semester)` : ''}, your overall attendance drops from <strong>${overallCurrent.toFixed(1)}%</strong> to <strong>${overallNew.toFixed(1)}%</strong>. ${subjectsAffected > 0 ? `<span style="color:var(--si-danger);font-weight:600;">${subjectsAffected} subject${subjectsAffected !== 1 ? 's' : ''} at risk: below ${minPercent}%, or own attendance below the medical minimum (then OD/ML stops counting).</span>` : `You'll still be above the ${minPercent}% threshold.`}</p>
                 <table class="si-subject-table">
                     <thead><tr><th>Subject</th><th>Current</th><th>After</th><th>Impact</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
@@ -1298,9 +1387,9 @@
             const status = s.currentPercent >= minPercent ? (s.currentPercent >= 85 ? 'safe' : 'warning') : 'danger';
             return `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
-                <td>${s.currentPercent.toFixed(1)}%</td>
-                <td>${s.withoutPercent.toFixed(1)}%</td>
-                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
+                <td class="odv-with">${s.currentPercent.toFixed(1)}%</td>
+                <td class="odv-orig">${s.withoutPercent.toFixed(1)}%</td>
+                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small class="odv-both" style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
                 <td><span class="si-badge ${status}">${s.stillNeed > 0 ? `Need ${s.stillNeed}` : '✅ Safe'}</span></td>
             </tr>`;
         }).join('');
@@ -1325,7 +1414,7 @@
                 </div>
                 ${atRisk.length > 0 ? `<p style="margin-top:14px;color:var(--si-danger);font-weight:600;">⚠️ ${atRisk.map(s => s.name || s.code).join(', ')} ${atRisk.length > 1 ? 'are' : 'is'} below the required ${minPercent}%!</p>` : '<p style="margin-top:14px;">No subjects are currently below the threshold. Keep it up! 💪</p>'}
                 <table class="si-subject-table">
-                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Original</th><th>Present</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Subject</th><th class="odv-with"><span class="odv-both">With OD/ML</span><span class="odv-plain">Attendance</span></th><th class="odv-orig">Original</th><th>Present</th><th>Status</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
                 </table>
             `
@@ -1346,9 +1435,9 @@
             const s = sub.analysis;
             return `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
-                <td style="color:var(--si-safe);font-weight:600;">${s.currentPercent.toFixed(1)}%</td>
-                <td>${s.withoutPercent.toFixed(1)}%</td>
-                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
+                <td class="odv-with" style="color:var(--si-safe);font-weight:600;">${s.currentPercent.toFixed(1)}%</td>
+                <td class="odv-orig" style="color:var(--si-safe);font-weight:600;">${s.withoutPercent.toFixed(1)}%</td>
+                <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small class="odv-both" style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
                 <td><span class="si-badge safe">Can skip ${s.maxSkippable}</span></td>
             </tr>`;
         }).join('');
@@ -1359,7 +1448,7 @@
             body: `
                 <p>Here are your best-performing subjects ranked by attendance percentage. These have the most room for safe skips.</p>
                 <table class="si-subject-table">
-                    <thead><tr><th>Subject</th><th>With OD/ML</th><th>Original</th><th>Present</th><th>Buffer</th></tr></thead>
+                    <thead><tr><th>Subject</th><th class="odv-with"><span class="odv-both">With OD/ML</span><span class="odv-plain">Attendance</span></th><th class="odv-orig">Original</th><th>Present</th><th>Buffer</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
                 </table>
             `
@@ -1405,18 +1494,19 @@
         return {
             icon: overallPercent >= minPercent ? '📊' : '📉',
             iconClass: overallStatus,
-            title: `Overall Attendance: ${overallPercent.toFixed(1)}%`,
+            title: `Overall Attendance: ${pctPairHtml(overallPercent, overallWithout)}`,
             body: `
                 <div class="si-progress-bar">
-                    <div class="si-progress-fill ${overallStatus}" style="width: ${Math.min(overallPercent, 100)}%"></div>
+                    <div class="si-progress-fill ${overallStatus} odv-with" style="width: ${Math.min(overallPercent, 100)}%"></div>
+                    <div class="si-progress-fill ${overallStatus} odv-orig" style="width: ${Math.min(overallWithout, 100)}%"></div>
                 </div>
-                <p style="margin:10px 0 0;"><strong>${overallPercent.toFixed(1)}%</strong> with OD/ML · <strong>${overallWithout.toFixed(1)}%</strong> without OD/ML${totalOdml ? ` (${totalOdml} OD/ML hours)` : ''}</p>
+                ${totalOdml ? `<p class="odv-both" style="margin:10px 0 0;"><span class="odv-with">Counting <strong>${totalOdml}</strong> OD/ML hours under your college rule.</span><span class="odv-orig">Original — only classes you actually attended.</span></p>` : ''}
                 <div class="si-stats-grid" style="margin-top:16px;">
                     <div class="si-stat-tile">
                         <div class="si-stat-value">${totalPresent}/${totalHeld}</div>
-                        <div class="si-stat-label">Present (original)</div>
+                        <div class="si-stat-label">Present<span class="odv-both"> (original)</span></div>
                     </div>
-                    <div class="si-stat-tile">
+                    <div class="si-stat-tile odv-both">
                         <div class="si-stat-value info">${totalOdml}</div>
                         <div class="si-stat-label">OD/ML hours</div>
                     </div>
@@ -1469,22 +1559,19 @@
             title: `${found.name || found.code}`,
             body: `
                 <div class="si-progress-bar">
-                    <div class="si-progress-fill ${status}" style="width: ${Math.min(s.currentPercent, 100)}%"></div>
+                    <div class="si-progress-fill ${status} odv-with" style="width: ${Math.min(s.currentPercent, 100)}%"></div>
+                    <div class="si-progress-fill ${status} odv-orig" style="width: ${Math.min(s.withoutPercent, 100)}%"></div>
                 </div>
                 <div class="si-stats-grid" style="margin-top:16px;">
                     <div class="si-stat-tile">
-                        <div class="si-stat-value ${status}">${s.currentPercent.toFixed(1)}%</div>
-                        <div class="si-stat-label">With OD/ML</div>
-                    </div>
-                    <div class="si-stat-tile">
-                        <div class="si-stat-value">${s.withoutPercent.toFixed(1)}%</div>
-                        <div class="si-stat-label">Without OD/ML</div>
+                        <div class="si-stat-value ${status}">${pctPairHtml(s.currentPercent, s.withoutPercent)}</div>
+                        <div class="si-stat-label"><span class="odv-plain">Attendance</span><span class="odv-both"><span class="odv-with">With OD/ML</span><span class="odv-orig">Original</span></span></div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value">${s.attended - s.odml}/${s.totalHeld}</div>
-                        <div class="si-stat-label">Present (original)</div>
+                        <div class="si-stat-label">Present<span class="odv-both"> (original)</span></div>
                     </div>
-                    <div class="si-stat-tile">
+                    <div class="si-stat-tile odv-both">
                         <div class="si-stat-value info">${s.odml}${s.allowancePlan ? `<small style="font-size:0.7em;opacity:0.7;">/${s.allowancePlan.allowance}</small>` : ''}</div>
                         <div class="si-stat-label">OD/ML hours${s.allowancePlan ? ' (allowance)' : ''}</div>
                     </div>
@@ -1566,7 +1653,9 @@
         if (!data.length) return noDataResponse();
 
         let targetPercent = 75;
-        for (const pattern of QUERY_PATTERNS.find(p => p.handler === 'handleTargetPercent').patterns) {
+        const direct = query.match(/(\d{2,3})\s*(?:%|percent)/i);
+        if (direct && +direct[1] > 0 && +direct[1] <= 100) targetPercent = +direct[1];
+        else for (const pattern of QUERY_PATTERNS.find(p => p.handler === 'handleTargetPercent').patterns) {
             const m = query.match(pattern);
             if (m) {
                 const val = parseInt(m[1] || m[2]);
@@ -2254,6 +2343,11 @@
             return onlyToday ? handleCanISkipToday(query) : handleDateLeaveImpact(query, parsed);
         }
 
+        // "what do I need for 80%" mentions "for …", which the subject lookup would grab first
+        if (/\d{2,3}\s*(?:%|percent)/i.test(query) && /\b(?:need|reach|get|achieve|maintain|target|goal|for|to)\b/i.test(query)) {
+            return handleTargetPercent(query);
+        }
+
         for (const rule of QUERY_PATTERNS) {
             for (const pattern of rule.patterns) {
                 const match = query.match(pattern);
@@ -2354,7 +2448,7 @@
     }
 
     function botMessage(inner) {
-        return `<div class="si-msg-avatar"><i class="fa-solid fa-robot"></i></div><div class="si-msg-content">${inner}</div>`;
+        return `<div class="si-msg-avatar"><i class="fa-solid fa-wand-magic-sparkles"></i></div><div class="si-msg-content">${inner}</div>`;
     }
 
     function appendThinking() {
@@ -2371,7 +2465,7 @@
         const iconClass = STATUS_ICONS[result.iconClass] ? result.iconClass : 'info';
         const title = String(result.title || '').replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim();
         const html = botMessage(`
-            <div class="si-answer-card">
+            <div class="si-answer-card si-tone-${iconClass}">
                 <div class="si-answer-header">
                     <div class="si-answer-icon ${iconClass}"><i class="fa-solid ${STATUS_ICONS[iconClass]}"></i></div>
                     <div class="si-answer-title">${title}</div>
@@ -2379,6 +2473,8 @@
                 <div class="si-answer-body">${polishBody(result.body || '')}</div>
                 <div class="si-answer-footer">
                     ${canSpeak() ? `<button type="button" class="si-listen" onclick="SmartSearch.speakAnswer(this)" aria-label="Read this answer aloud"><i class="fa-solid fa-volume-high"></i> Listen</button>` : ''}
+                    <button type="button" class="si-listen" onclick="SmartSearch.copyAnswer(this)" aria-label="Copy this answer"><i class="fa-regular fa-copy"></i> Copy</button>
+                    <span class="si-footer-spacer"></span>
                     <span>Not what you needed?</span>
                     <a href="${whatsAppLink(query)}" target="_blank" rel="noopener noreferrer" class="si-wa-link">
                         <i class="fa-brands fa-whatsapp"></i> Ask on WhatsApp
@@ -2386,6 +2482,7 @@
                 </div>
             </div>`);
 
+        if (window.OdmlView) OdmlView.refresh(getAttendanceData());
         let el = target;
         if (el) { el.innerHTML = html; } else { el = appendMessage(html, 'si-msg-bot'); }
         scrollThread(el);
@@ -2562,11 +2659,40 @@
     function showWelcome() {
         const thread = getThread();
         if (!thread) return;
+        const cls = getSelectedClassObj();
+        let first = '';
+        try { first = (JSON.parse(localStorage.getItem('studentProfile') || '{}').name || localStorage.getItem('userProfileName') || '').trim().split(/\s+/)[0]; } catch (e) { first = ''; }
+        const hour = new Date().getHours();
+        const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+        const cards = [
+            { q: 'Can I skip tomorrow?', icon: 'fa-calendar-day', tone: 'blue', title: 'Skip tomorrow?', sub: 'See the impact before you bunk' },
+            { q: 'What if I miss next week?', icon: 'fa-plane-departure', tone: 'violet', title: 'Plan a leave', sub: 'Effect of a week off, subject by subject' },
+            { q: 'How many classes can I skip?', icon: 'fa-shield-halved', tone: 'green', title: 'Safe skips', sub: 'How many you can still miss' },
+            { q: 'Which subjects are at risk?', icon: 'fa-triangle-exclamation', tone: 'amber', title: 'At-risk subjects', sub: 'Where you are close to the limit' }
+        ];
+        let recent = [];
+        try { recent = getSearchHistory().slice(0, 4); } catch (e) { recent = []; }
+        const more = document.querySelector('#smartSearchPage .si-suggestions');
         thread.innerHTML = `
-            <div class="si-chat-empty">
-                <div class="si-chat-empty-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                <h3>How can I help?</h3>
-                <p>Ask about leaves, skips or any subject.</p>
+            <div class="si-chat-empty si-welcome">
+                <div class="si-welcome-badge"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <h2 class="si-welcome-title">${greet}${first ? `, <span>${escapeHtml(first)}</span>` : ''}</h2>
+                <p class="si-welcome-sub">${cls ? `Ask anything about <strong>${escapeHtml(cls.name || 'your class')}</strong> — leaves, skips, subjects or exam days.` : 'Add a class, then ask anything about your attendance.'}</p>
+                <div class="si-welcome-cards">
+                    ${cards.map(c => `
+                    <button type="button" class="si-welcome-card" onclick="SmartSearch.runQuery(${escapeHtml(JSON.stringify(c.q))})">
+                        <span class="si-wc-icon si-wc-${c.tone}"><i class="fa-solid ${c.icon}"></i></span>
+                        <span class="si-wc-title">${c.title}</span>
+                        <span class="si-wc-sub">${c.sub}</span>
+                    </button>`).join('')}
+                </div>
+                ${recent.length ? `
+                <div class="si-welcome-section">
+                    <div class="si-welcome-label"><i class="fa-solid fa-clock-rotate-left"></i> Recent</div>
+                    <div class="si-welcome-chips">${recent.map(r => `<button type="button" class="si-chip" onclick="SmartSearch.runQuery(${escapeHtml(JSON.stringify(r))})">${escapeHtml(r)}</button>`).join('')}</div>
+                </div>` : ''}
+                ${more ? `<div class="si-welcome-more">${more.innerHTML}</div>` : ''}
+                <p class="si-welcome-foot"><i class="fa-solid fa-lock"></i> Runs on your device · your data never leaves your phone</p>
             </div>`;
         updateNewChatBtn();
     }
@@ -2585,9 +2711,6 @@
         const input = document.getElementById('siSearchInput');
         if (input) input.value = '';
 
-        // Make sure the chat is visible (quick chips sit below it)
-        const thread = getThread();
-        if (thread && thread.getBoundingClientRect().top < 0) thread.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         getThread()?.querySelector('.si-chat-empty')?.remove();
         const userEl = appendUserMessage(query);
@@ -2620,12 +2743,29 @@
         runQuery(input.value.trim());
     }
 
+    function copyAnswer(btn) {
+        const card = btn.closest('.si-answer-card');
+        if (!card) return;
+        const clone = card.cloneNode(true);
+        clone.querySelector('.si-answer-footer')?.remove();
+        const text = clone.innerText.replace(/\n{3,}/g, '\n\n').trim();
+        const done = () => { btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied'; setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy'; }, 1600); };
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done).catch(() => {});
+        else { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); done(); } catch (e) { /* ignore */ } t.remove(); }
+    }
+
     function newChat() {
         showWelcome();
         document.getElementById('siSearchInput')?.focus();
     }
 
+    function mountOdmlToggle() {
+        const slot = document.getElementById('siOdmlToggle');
+        if (slot && window.OdmlView) { slot.innerHTML = OdmlView.toggleHTML(); OdmlView.refresh(getAttendanceData()); }
+    }
+
     function initSmartSearch() {
+        mountOdmlToggle();
         const mic = document.getElementById('siMicBtn');
         if (mic) mic.hidden = !SpeechRec;
         updateLangButton();
@@ -2643,6 +2783,7 @@
         clearHistory,
         processQuery,
         newChat,
+        copyAnswer,
         toggleVoice,
         speakAnswer,
         setVoiceLang,

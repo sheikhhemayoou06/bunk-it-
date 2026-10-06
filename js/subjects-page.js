@@ -129,12 +129,13 @@
                         <span class="sp-code">${esc(r.code)}</span>
                     </div>
                     <div class="sp-percent-wrap">
-                        <div class="sp-percent sp-text-${r.status}">${r.totalHeld ? pct.toFixed(1) + '%' : '—'}</div>
-                        ${r.totalHeld ? `<div class="sp-percent-sub">${r.percentWithout.toFixed(1)}% without OD/ML</div>` : ''}
+                        <div class="sp-percent sp-text-${r.status}">${r.totalHeld ? (window.OdmlView ? OdmlView.pair(pct.toFixed(1) + '%', r.percentWithout.toFixed(1) + '%') : pct.toFixed(1) + '%') : '—'}</div>
+                        ${r.totalHeld ? `<div class="sp-percent-sub odv-both"><span class="odv-with">with OD/ML</span><span class="odv-orig">original · present only</span></div>` : ''}
                     </div>
                 </div>
                 <div class="sp-bar" role="progressbar" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100">
-                    <span class="sp-bar-fill sp-fill-${r.status}" style="width:${pct}%"></span>
+                    <span class="sp-bar-fill sp-fill-${r.status} odv-with" style="width:${pct}%"></span>
+                    <span class="sp-bar-fill sp-fill-${r.status} odv-orig" style="width:${Math.max(0, Math.min(100, r.percentWithout))}%"></span>
                     <span class="sp-bar-mark" style="left:${min}%" title="Required ${min}%"></span>
                 </div>
                 <div class="sp-meta">
@@ -157,6 +158,11 @@
     }
 
     function render() {
+        renderInner();
+        if (window.OdmlView) OdmlView.refresh();
+    }
+
+    function renderInner() {
         const root = document.getElementById('subjectsRoot');
         if (!root) return;
         const cls = getClass();
@@ -196,14 +202,11 @@
 
         root.innerHTML = `
             ${header('Subjects', `${esc(className())} · ${rows.length} subject${rows.length !== 1 ? 's' : ''}`)}
+            ${window.OdmlView ? `<div class="sp-odml-switch">${OdmlView.toggleHTML()}</div>` : ''}
             <section class="sp-summary">
                 <div class="sp-summary-item">
-                    <span class="sp-summary-value">${held ? overall.toFixed(1) + '%' : '—'}</span>
-                    <span class="sp-summary-label">With OD/ML</span>
-                </div>
-                <div class="sp-summary-item">
-                    <span class="sp-summary-value">${held ? overallWithout.toFixed(1) + '%' : '—'}</span>
-                    <span class="sp-summary-label">Without OD/ML</span>
+                    <span class="sp-summary-value">${held ? (window.OdmlView ? OdmlView.pair(overall.toFixed(1) + '%', overallWithout.toFixed(1) + '%') : overall.toFixed(1) + '%') : '—'}</span>
+                    <span class="sp-summary-label"><span class="odv-plain">Overall</span><span class="odv-both"><span class="odv-with">Overall · with OD/ML</span><span class="odv-orig">Overall · original</span></span></span>
                 </div>
                 <div class="sp-summary-item">
                     <span class="sp-summary-value sp-text-safe">${counts.safe}</span>

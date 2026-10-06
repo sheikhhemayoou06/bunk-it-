@@ -1,0 +1,709 @@
+/* ============================================================
+   SMART SEARCH — modern chat layout
+   Loaded after smart-search.css; uses its --si-* tokens (light + dark).
+   ============================================================ */
+
+#smartSearchPage {
+    --si-accent: #6366f1;
+    --si-accent-2: #3b82f6;
+    --si-grad: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+    --si-nav-h: 72px;
+    background:
+        radial-gradient(900px 420px at 50% -120px, rgba(99, 102, 241, 0.10), transparent 70%),
+        var(--si-bg);
+}
+
+body.dark-mode #smartSearchPage {
+    background:
+        radial-gradient(900px 420px at 50% -120px, rgba(99, 102, 241, 0.18), transparent 70%),
+        var(--si-bg);
+}
+
+/* Full-height chat: header / thread / composer */
+#smartSearchPage .si-main-container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 16px 20px 0;
+    height: calc(100dvh - var(--si-nav-h) - env(safe-area-inset-bottom));
+    min-height: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-sizing: border-box;
+    background: transparent;
+    box-shadow: none;
+    border: none;
+}
+
+/* Quick-question sections live inside the welcome screen now */
+#smartSearchPage > .si-main-container > .si-suggestions,
+#smartSearchPage > .si-main-container > .si-help-card,
+#smartSearchPage > .si-main-container > .si-history-section {
+    display: none !important;
+}
+
+/* ---------- Header ---------- */
+#smartSearchPage .si-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+#smartSearchPage .si-header-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--si-grad);
+    box-shadow: 0 8px 20px -8px rgba(79, 70, 229, 0.7);
+    font-size: 1rem;
+}
+
+#smartSearchPage .si-header-text h1 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+}
+
+#smartSearchPage .si-header-text p {
+    margin: 1px 0 0;
+    font-size: 0.8rem;
+}
+
+#smartSearchPage .si-header-badge {
+    margin-left: auto;
+    font-size: 0.72rem;
+    padding: 5px 10px;
+}
+
+/* ---------- Chat card becomes the whole stage ---------- */
+#smartSearchPage .si-chat-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+}
+
+#smartSearchPage .si-chat-thread {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    height: auto;
+    overflow-y: auto;
+    padding: 8px 4px 20px;
+    gap: 22px;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+
+/* ---------- Welcome ---------- */
+#smartSearchPage .si-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 4vh 4px 8px;
+    margin: auto 0;
+    animation: siRise 0.5s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+#smartSearchPage .si-welcome-badge {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 1.35rem;
+    background: var(--si-grad);
+    box-shadow: 0 16px 34px -12px rgba(79, 70, 229, 0.75);
+    margin-bottom: 18px;
+}
+
+#smartSearchPage .si-welcome-title {
+    margin: 0;
+    font-size: clamp(1.6rem, 3.6vw, 2.25rem);
+    font-weight: 700;
+    letter-spacing: -0.6px;
+    color: var(--si-text);
+}
+
+#smartSearchPage .si-welcome-title span {
+    background: var(--si-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+#smartSearchPage .si-welcome-sub {
+    margin: 8px 0 26px;
+    max-width: 520px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-welcome-cards {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+#smartSearchPage .si-welcome-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--si-border);
+    background: var(--si-surface);
+    color: var(--si-text);
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: var(--si-shadow);
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+#smartSearchPage .si-welcome-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 14px 30px -14px rgba(79, 70, 229, 0.45);
+}
+
+#smartSearchPage .si-wc-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.si-wc-blue { color: #2563eb; background: rgba(59, 130, 246, 0.12); }
+.si-wc-violet { color: #7c3aed; background: rgba(139, 92, 246, 0.13); }
+.si-wc-green { color: #059669; background: rgba(16, 185, 129, 0.13); }
+.si-wc-amber { color: #d97706; background: rgba(245, 158, 11, 0.15); }
+
+#smartSearchPage .si-wc-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+#smartSearchPage .si-wc-sub {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-welcome-section,
+#smartSearchPage .si-welcome-more .si-group {
+    width: 100%;
+    margin-top: 22px;
+    text-align: left;
+}
+
+#smartSearchPage .si-welcome-more {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: 20px;
+}
+
+#smartSearchPage .si-welcome-more .si-group {
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+#smartSearchPage .si-welcome-more .si-chips-wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    grid-template-columns: none !important;
+}
+
+#smartSearchPage .si-welcome-more .si-chip {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+}
+
+#smartSearchPage .si-welcome-label,
+#smartSearchPage .si-welcome-more .si-group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-welcome-chips,
+#smartSearchPage .si-welcome-more .si-chips-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#smartSearchPage .si-welcome .si-chip {
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--si-border);
+    background: var(--si-surface);
+    color: var(--si-text);
+    font-family: inherit;
+    font-size: 0.84rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+#smartSearchPage .si-welcome .si-chip i {
+    color: var(--si-accent);
+    font-size: 0.8rem;
+}
+
+#smartSearchPage .si-welcome .si-chip:hover {
+    border-color: var(--si-accent);
+    background: rgba(99, 102, 241, 0.06);
+}
+
+#smartSearchPage .si-welcome-foot {
+    margin: 26px 0 0;
+    font-size: 0.75rem;
+    color: var(--si-text-secondary);
+}
+
+/* ---------- Messages ---------- */
+#smartSearchPage .si-msg {
+    animation: siRise 0.35s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+#smartSearchPage .si-msg-user {
+    align-items: flex-end;
+}
+
+#smartSearchPage .si-msg-user .si-bubble {
+    max-width: min(78%, 560px);
+    padding: 11px 16px;
+    border-radius: 20px 20px 6px 20px;
+    background: var(--si-grad);
+    color: #fff;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    box-shadow: 0 10px 22px -12px rgba(79, 70, 229, 0.8);
+}
+
+#smartSearchPage .si-msg-meta {
+    font-size: 0.7rem;
+    margin-top: 4px;
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-msg-bot {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+#smartSearchPage .si-msg-avatar {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    background: var(--si-grad);
+    color: #fff;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 14px -6px rgba(79, 70, 229, 0.7);
+}
+
+#smartSearchPage .si-msg-content {
+    flex: 1;
+    min-width: 0;
+}
+
+#smartSearchPage .si-thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: var(--si-surface);
+    border: 1px solid var(--si-border);
+    color: var(--si-text-secondary);
+    font-size: 0.88rem;
+}
+
+/* ---------- Answer card ---------- */
+#smartSearchPage .si-answer-card {
+    position: relative;
+    padding: 18px 20px 14px;
+    border-radius: 18px;
+    background: var(--si-surface);
+    border: 1px solid var(--si-border);
+    box-shadow: var(--si-shadow);
+    overflow: hidden;
+}
+
+#smartSearchPage .si-answer-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--si-accent);
+}
+
+#smartSearchPage .si-tone-safe::before { background: var(--si-success); }
+#smartSearchPage .si-tone-warning::before { background: var(--si-warning); }
+#smartSearchPage .si-tone-danger::before { background: var(--si-danger); }
+
+#smartSearchPage .si-answer-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+#smartSearchPage .si-answer-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+#smartSearchPage .si-answer-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.2px;
+}
+
+#smartSearchPage .si-answer-body {
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--si-text);
+}
+
+#smartSearchPage .si-answer-body p {
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-answer-body strong {
+    color: var(--si-text);
+}
+
+/* Stat tiles */
+#smartSearchPage .si-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 0 0 4px;
+}
+
+#smartSearchPage .si-stat-tile {
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--si-border);
+    background: var(--si-bg);
+    text-align: left;
+}
+
+#smartSearchPage .si-stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+}
+
+#smartSearchPage .si-stat-label {
+    margin-top: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--si-text-secondary);
+}
+
+/* Tables */
+#smartSearchPage .si-subject-table {
+    width: 100%;
+    margin-top: 14px;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--si-border);
+    border-radius: 14px;
+    overflow: hidden;
+    font-size: 0.86rem;
+}
+
+#smartSearchPage .si-subject-table th {
+    padding: 10px 12px;
+    background: var(--si-bg);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--si-text-secondary);
+    text-align: left;
+    border-bottom: 1px solid var(--si-border);
+}
+
+#smartSearchPage .si-subject-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--si-border);
+    vertical-align: middle;
+}
+
+#smartSearchPage .si-subject-table tr:last-child td {
+    border-bottom: none;
+}
+
+#smartSearchPage .si-subject-table tbody tr:hover td {
+    background: rgba(99, 102, 241, 0.04);
+}
+
+#smartSearchPage .si-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Footer actions */
+#smartSearchPage .si-answer-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--si-border);
+    font-size: 0.78rem;
+    color: var(--si-text-secondary);
+}
+
+#smartSearchPage .si-footer-spacer {
+    flex: 1;
+}
+
+#smartSearchPage .si-listen {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--si-border);
+    background: transparent;
+    color: var(--si-text-secondary);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+#smartSearchPage .si-listen:hover {
+    color: var(--si-accent);
+    border-color: var(--si-accent);
+}
+
+/* ---------- Composer (docked) ---------- */
+#smartSearchPage .si-composer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 8px;
+    border-radius: 22px;
+    border: 1px solid var(--si-border);
+    background: var(--si-surface);
+    box-shadow: 0 18px 40px -18px rgba(15, 23, 42, 0.35), 0 2px 6px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#smartSearchPage .si-composer:focus-within {
+    border-color: rgba(99, 102, 241, 0.55);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12), 0 18px 40px -18px rgba(15, 23, 42, 0.35);
+}
+
+#smartSearchPage .si-search-bar {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+#smartSearchPage .si-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 10px 10px 12px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--si-text);
+    font-family: inherit;
+    font-size: 1rem;
+    box-shadow: none;
+}
+
+#smartSearchPage .si-search-input:focus {
+    border: none;
+    box-shadow: none;
+}
+
+#smartSearchPage .si-new-chat,
+#smartSearchPage .si-lang-btn,
+#smartSearchPage .si-mic-btn {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    border: none;
+    background: transparent;
+    color: var(--si-text-secondary);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+#smartSearchPage .si-lang-btn {
+    width: auto;
+    padding: 0 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+#smartSearchPage .si-new-chat:hover,
+#smartSearchPage .si-lang-btn:hover,
+#smartSearchPage .si-mic-btn:hover {
+    background: var(--si-bg);
+    color: var(--si-accent);
+}
+
+#smartSearchPage .si-send-btn {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    border: none;
+    background: var(--si-grad);
+    color: #fff;
+    font-size: 0.95rem;
+    cursor: pointer;
+    box-shadow: 0 8px 18px -8px rgba(79, 70, 229, 0.8);
+    transition: transform 0.15s, filter 0.2s;
+}
+
+#smartSearchPage .si-send-btn:hover {
+    filter: brightness(1.08);
+}
+
+#smartSearchPage .si-send-btn:active {
+    transform: scale(0.94);
+}
+
+@keyframes siRise {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 760px) {
+    #smartSearchPage .si-main-container {
+        padding: 12px 12px 0;
+    }
+
+    #smartSearchPage .si-header-text p {
+        display: none;
+    }
+
+    #smartSearchPage .si-welcome {
+        padding-top: 2vh;
+    }
+
+    #smartSearchPage .si-welcome-cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    #smartSearchPage .si-welcome-card {
+        padding: 13px;
+    }
+
+    #smartSearchPage .si-welcome-more {
+        grid-template-columns: 1fr;
+    }
+
+    #smartSearchPage .si-msg-avatar {
+        display: none;
+    }
+
+    #smartSearchPage .si-answer-card {
+        padding: 16px 14px 12px;
+    }
+
+    #smartSearchPage .si-subject-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    #smartSearchPage .si-composer {
+        margin-bottom: 10px;
+        border-radius: 20px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #smartSearchPage .si-welcome,
+    #smartSearchPage .si-msg {
+        animation: none;
+    }
+}
+
+/* Original / With OD/ML switch in the header */
+#smartSearchPage .si-header .si-header-badge { margin-left: auto; }
+#smartSearchPage .si-odml-slot { flex-shrink: 0; }
+@media (max-width: 760px) {
+    #smartSearchPage .si-header { flex-wrap: wrap; }
+    #smartSearchPage .si-odml-slot { order: 5; width: 100%; display: flex; justify-content: flex-start; }
+    #smartSearchPage .si-odml-slot:empty { display: none; }
+}

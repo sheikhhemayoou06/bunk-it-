@@ -76,65 +76,103 @@
             </section>`;
     }
 
+    // ---------- Profile data ----------
+    function getProfile() {
+        try { return JSON.parse(localStorage.getItem('studentProfile') || '{}') || {}; } catch (e) { return {}; }
+    }
+
+    function displayName() {
+        const user = window.AuthManager?.user;
+        const p = getProfile();
+        return p.name || user?.user_metadata?.full_name || localStorage.getItem('userProfileName') || '';
+    }
+
+    function fmtPhone(phone) {
+        const d = String(phone || '').replace(/\D/g, '');
+        if (d.length === 10) return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
+        if (d.length === 12 && d.startsWith('91')) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
+        return phone || '';
+    }
+
+    // Editable fields: one place for labels, input types and validation
+    const FIELDS = {
+        name: { label: 'Full name', icon: 'fa-user', type: 'text', placeholder: 'e.g. Aarav Sharma', max: 60, auto: 'name', required: true,
+            help: 'Shown on your dashboard and to classmates in shared classes.',
+            validate: v => v.length < 2 ? 'Please enter your full name.' : '' },
+        phone: { label: 'Phone number', icon: 'fa-phone', type: 'tel', placeholder: '10-digit mobile number', max: 16, auto: 'tel', mode: 'tel',
+            help: 'Only used to identify your account. Never shared.',
+            normalize: v => { let d = v.replace(/[^\d]/g, ''); if (d.length === 12 && d.startsWith('91')) d = d.slice(2); if (d.length === 11 && d.startsWith('0')) d = d.slice(1); return d; },
+            validate: v => v && !/^[6-9]\d{9}$/.test(v) ? 'Enter a valid 10-digit Indian mobile number.' : '',
+            show: fmtPhone },
+        regNo: { label: 'Registration number', icon: 'fa-id-card', type: 'text', placeholder: 'e.g. RA2411003030476', max: 30,
+            normalize: v => v.toUpperCase().replace(/\s+/g, ''),
+            validate: v => v && !/^[A-Z0-9/-]{4,30}$/.test(v) ? 'Use letters and numbers only.' : '' },
+        college: { label: 'College / university', icon: 'fa-building-columns', type: 'text', placeholder: 'e.g. SRM Institute of Science and Technology', max: 80 },
+        branch: { label: 'Branch / department', icon: 'fa-sitemap', type: 'text', placeholder: 'e.g. Computer Science (CSE)', max: 40 },
+        semester: { label: 'Semester', icon: 'fa-layer-group', type: 'select', options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+            show: v => v ? `Semester ${v}` : '' }
+    };
+
+    function profileCompletion() {
+        const p = getProfile();
+        const keys = ['name', 'phone', 'regNo', 'college', 'branch', 'semester'];
+        const done = keys.filter(k => k === 'name' ? !!displayName() : !!p[k]).length + (window.AuthManager?.user ? 1 : 0);
+        return { done, total: keys.length + 1 };
+    }
+
     function accountCard() {
         const user = window.AuthManager?.user;
-        const profile = JSON.parse(localStorage.getItem('studentProfile') || '{}');
-        const name = profile.name || user?.user_metadata?.full_name || localStorage.getItem('userProfileName') || (user ? user.email.split('@')[0] : 'Guest');
+        const name = displayName() || (user ? user.email.split('@')[0] : 'Guest');
         const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'G';
-        const meta = [profile.phone, profile.regNo, profile.branch, profile.semester ? `Sem ${profile.semester}` : '', profile.college].filter(Boolean).join(' · ');
+        const { done, total } = profileCompletion();
+        const pct = Math.round(done / total * 100);
 
         return `
-            <section class="pf-card pf-account">
-                <div class="pf-avatar">${esc(initials)}</div>
-                <div class="pf-account-text">
-                    <h2>${esc(name)}</h2>
-                    <p>${user ? esc(user.email) : 'Guest · data is saved on this device only'}</p>
-                    ${meta ? `<p class="pf-account-meta">${esc(meta)}</p>` : ''}
-                    <span class="pf-status ${user ? 'ok' : 'guest'}">
-                        <i class="fa-solid ${user ? 'fa-cloud' : 'fa-mobile-screen'}"></i> ${user ? 'Synced to cloud' : 'Not synced'}
-                    </span>
-                </div>
-                <div class="pf-account-actions">
+            <section class="pf-card pf-hero">
+                <div class="pf-hero-avatar">${esc(initials)}</div>
+                <h2 class="pf-hero-name">${esc(name)}</h2>
+                <p class="pf-hero-sub">${user ? esc(user.email) : 'Guest · data saved on this device only'}</p>
+                <span class="pf-status ${user ? 'ok' : 'guest'}">
+                    <i class="fa-solid ${user ? 'fa-circle-check' : 'fa-mobile-screen'}"></i> ${user ? 'Signed in · synced to cloud' : 'Not signed in'}
+                </span>
+                ${pct < 100 ? `
+                <div class="pf-complete">
+                    <div class="pf-complete-head"><span>Profile ${pct}% complete</span><span>${done}/${total}</span></div>
+                    <div class="pf-complete-bar"><i style="width:${pct}%"></i></div>
+                </div>` : ''}
+                <div class="pf-hero-actions">
                     ${user
                         ? `<button class="pf-btn" onclick="ProfilePage.syncNow(this)"><i class="fa-solid fa-rotate"></i> Sync now</button>`
                         : `<button class="pf-btn pf-btn-primary" onclick="ProfilePage.signIn()"><i class="fa-solid fa-right-to-bracket"></i> Sign in to sync</button>`}
-                    <button class="pf-btn" onclick="ProfilePage.editDetails()"><i class="fa-solid fa-pen"></i> Edit details</button>
                 </div>
             </section>`;
     }
 
-    function field(id, label, value, { type = 'text', placeholder = '', readonly = false, hint = '', attrs = '' } = {}) {
+    // One "label / value" row that opens the editor
+    function infoRow(key) {
+        const f = FIELDS[key];
+        const raw = key === 'name' ? displayName() : getProfile()[key];
+        const shown = raw ? (f.show ? f.show(raw) : raw) : '';
         return `
-            <label class="pf-field">
-                <span class="pf-field-label">${label}</span>
-                <input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" ${readonly ? 'readonly' : ''} ${attrs}>
-                ${hint ? `<span class="pf-field-hint">${hint}</span>` : ''}
-            </label>`;
+            <button type="button" class="pf-info-row" onclick="ProfilePage.editField('${key}')">
+                <span class="pf-info-icon"><i class="fa-solid ${f.icon}"></i></span>
+                <span class="pf-info-text">
+                    <span class="pf-info-label">${f.label}</span>
+                    <span class="pf-info-value ${shown ? '' : 'empty'}">${shown ? esc(shown) : 'Add'}</span>
+                </span>
+                <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
+            </button>`;
     }
 
     function detailsCard() {
-        const user = window.AuthManager?.user;
-        const p = JSON.parse(localStorage.getItem('studentProfile') || '{}');
-        const name = p.name || user?.user_metadata?.full_name || localStorage.getItem('userProfileName') || '';
-        const phone = p.phone || user?.user_metadata?.phone || '';
         return `
             <section class="pf-group" id="pfDetails">
-                <h3 class="pf-group-label">Your details</h3>
-                <div class="pf-card pf-form">
-                    <div class="pf-form-grid">
-                        ${field('pfName', 'Full name', name, { placeholder: 'e.g. Aarav Sharma', attrs: 'autocomplete="name" maxlength="60"' })}
-                        ${field('pfPhone', 'Phone number', phone, { type: 'tel', placeholder: '10-digit mobile number', attrs: 'autocomplete="tel" inputmode="tel" maxlength="15"' })}
-                        ${field('pfEmail', 'Email', user ? user.email : '', { type: 'email', readonly: true, placeholder: 'Sign in to add an email', hint: user ? 'Change it under Login & security' : 'Sign in to add an email and password' })}
-                        ${field('pfRegNo', 'Registration no.', p.regNo || '', { placeholder: 'e.g. RA2111003010123', attrs: 'maxlength="30"' })}
-                        ${field('pfCollege', 'College', p.college || '', { placeholder: 'Your college or university', attrs: 'maxlength="80"' })}
-                        ${field('pfBranch', 'Branch / department', p.branch || '', { placeholder: 'e.g. CSE', attrs: 'maxlength="40"' })}
-                        ${field('pfSemester', 'Semester', p.semester || '', { type: 'number', placeholder: 'e.g. 5', attrs: 'min="1" max="12" inputmode="numeric"' })}
-                    </div>
-                    <div class="pf-form-actions">
-                        <span class="pf-form-msg" id="pfDetailsMsg"></span>
-                        <button class="pf-btn pf-btn-primary" onclick="ProfilePage.saveDetails(this)"><i class="fa-solid fa-floppy-disk"></i> Save details</button>
-                    </div>
-                </div>
+                <h3 class="pf-group-label">Personal info</h3>
+                <div class="pf-card pf-list">${['name', 'phone'].map(infoRow).join('')}</div>
+            </section>
+            <section class="pf-group">
+                <h3 class="pf-group-label">Academic details</h3>
+                <div class="pf-card pf-list">${['regNo', 'college', 'branch', 'semester'].map(infoRow).join('')}</div>
             </section>`;
     }
 
@@ -148,56 +186,33 @@
                         <i class="fa-solid fa-lock"></i>
                         <div>
                             <strong>No account yet</strong>
-                            <span>Create an account to set your email and password, and back up your data.</span>
+                            <span>Create an account to add an email and password, and back up your data.</span>
                         </div>
                         <button class="pf-btn pf-btn-primary" onclick="ProfilePage.signIn()">Create account</button>
                     </div>
                 </section>`;
         }
-        const pwField = (id, label) => `
-            <label class="pf-field">
-                <span class="pf-field-label">${label}</span>
-                <span class="pf-pw">
-                    <input id="${id}" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters">
-                    <button type="button" onclick="ProfilePage.togglePw('${id}', this)" aria-label="Show password"><i class="fa-regular fa-eye"></i></button>
-                </span>
-            </label>`;
+        const google = (user.app_metadata?.providers || [user.app_metadata?.provider]).includes('google');
         return `
             <section class="pf-group">
                 <h3 class="pf-group-label">Login & security</h3>
-                <div class="pf-card pf-form">
-                    <div class="pf-sec-row">
-                        <div>
-                            <span class="pf-field-label">Email</span>
-                            <strong class="pf-sec-value">${esc(user.email)}</strong>
-                        </div>
-                        <button class="pf-btn" onclick="ProfilePage.toggleSection('pfEmailForm')"><i class="fa-solid fa-at"></i> Change email</button>
-                    </div>
-                    <div class="pf-sub-form" id="pfEmailForm" hidden>
-                        ${field('pfNewEmail', 'New email', '', { type: 'email', placeholder: 'name@example.com', attrs: 'autocomplete="email"' })}
-                        <div class="pf-form-actions">
-                            <span class="pf-form-msg" id="pfEmailMsg"></span>
-                            <button class="pf-btn pf-btn-primary" onclick="ProfilePage.changeEmail(this)">Send confirmation</button>
-                        </div>
-                    </div>
-
-                    <div class="pf-sec-row">
-                        <div>
-                            <span class="pf-field-label">Password</span>
-                            <strong class="pf-sec-value">••••••••</strong>
-                        </div>
-                        <button class="pf-btn" onclick="ProfilePage.toggleSection('pfPwForm')"><i class="fa-solid fa-key"></i> Change password</button>
-                    </div>
-                    <div class="pf-sub-form" id="pfPwForm" hidden>
-                        <div class="pf-form-grid">
-                            ${pwField('pfNewPw', 'New password')}
-                            ${pwField('pfNewPw2', 'Confirm new password')}
-                        </div>
-                        <div class="pf-form-actions">
-                            <span class="pf-form-msg" id="pfPwMsg"></span>
-                            <button class="pf-btn pf-btn-primary" onclick="ProfilePage.changePassword(this)">Update password</button>
-                        </div>
-                    </div>
+                <div class="pf-card pf-list">
+                    <button type="button" class="pf-info-row" onclick="ProfilePage.editEmail()">
+                        <span class="pf-info-icon"><i class="fa-solid fa-envelope"></i></span>
+                        <span class="pf-info-text">
+                            <span class="pf-info-label">Email</span>
+                            <span class="pf-info-value">${esc(user.email)}${user.email_confirmed_at ? ' <i class="fa-solid fa-circle-check pf-verified" title="Verified"></i>' : ''}</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
+                    </button>
+                    <button type="button" class="pf-info-row" onclick="ProfilePage.editPassword()">
+                        <span class="pf-info-icon"><i class="fa-solid fa-key"></i></span>
+                        <span class="pf-info-text">
+                            <span class="pf-info-label">Password</span>
+                            <span class="pf-info-value">${google ? 'Set a password to also sign in with email' : '••••••••'}</span>
+                        </span>
+                        <i class="fa-solid fa-chevron-right pf-row-arrow"></i>
+                    </button>
                 </div>
             </section>`;
     }
@@ -362,112 +377,213 @@
         AuthManager.deleteAccount(); // has its own double confirmation
     }
 
-    function msg(id, text, ok) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.textContent = text;
-        el.className = 'pf-form-msg ' + (ok ? 'ok' : 'err');
+    // ---------- Editor sheet ----------
+    let sheetSave = null;
+
+    function sheetEl() {
+        let el = document.getElementById('pfSheet');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'pfSheet';
+            el.className = 'pf-sheet-wrap';
+            el.addEventListener('click', e => { if (e.target === el) closeSheet(); });
+            el.addEventListener('keydown', e => {
+                if (e.key === 'Escape') closeSheet();
+                if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); el.querySelector('.pf-sheet-save')?.click(); }
+            });
+            document.body.appendChild(el);
+        }
+        return el;
     }
 
-    function val(id) {
-        return (document.getElementById(id)?.value || '').trim();
+    function openSheet({ title, sub = '', body, saveLabel = 'Save', onSave }) {
+        const el = sheetEl();
+        el.classList.toggle('dark', isDark());
+        el.innerHTML = `
+            <div class="pf-sheet" role="dialog" aria-modal="true" aria-labelledby="pfSheetTitle">
+                <div class="pf-sheet-grip"></div>
+                <h3 id="pfSheetTitle">${title}</h3>
+                ${sub ? `<p class="pf-sheet-sub">${sub}</p>` : ''}
+                <div class="pf-sheet-body">${body}</div>
+                <p class="pf-sheet-msg" id="pfSheetMsg" role="status"></p>
+                <div class="pf-sheet-actions">
+                    <button type="button" class="pf-btn" onclick="ProfilePage.closeSheet()">Cancel</button>
+                    <button type="button" class="pf-btn pf-btn-primary pf-sheet-save" onclick="ProfilePage.submitSheet(this)">${saveLabel}</button>
+                </div>
+            </div>`;
+        sheetSave = onSave;
+        el.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => { const i = el.querySelector('input, select'); if (i) { i.focus(); if (i.select && i.type !== 'tel') i.select(); } }, 120);
+    }
+
+    function closeSheet() {
+        const el = document.getElementById('pfSheet');
+        if (el) el.classList.remove('open');
+        document.body.style.overflow = '';
+        sheetSave = null;
+    }
+
+    function sheetMsg(text, ok) {
+        const el = document.getElementById('pfSheetMsg');
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'pf-sheet-msg ' + (ok ? 'ok' : 'err');
+    }
+
+    async function submitSheet(btn) {
+        if (!sheetSave) return;
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        let keepOpen = false;
+        try { keepOpen = await sheetSave(); } catch (e) { sheetMsg(e.message || 'Something went wrong. Try again.', false); keepOpen = true; }
+        btn.disabled = false;
+        btn.textContent = label;
+        if (!keepOpen) closeSheet();
+    }
+
+    function input(id, f, value) {
+        if (f.type === 'select') {
+            return `<label class="pf-field"><span class="pf-field-label">${f.label}</span>
+                <select id="${id}"><option value="">Select</option>${f.options.map(o => `<option value="${o}" ${String(value) === o ? 'selected' : ''}>Semester ${o}</option>`).join('')}</select></label>`;
+        }
+        return `<label class="pf-field"><span class="pf-field-label">${f.label}</span>
+            <input id="${id}" type="${f.type}" value="${esc(value)}" placeholder="${esc(f.placeholder || '')}" maxlength="${f.max || 80}"
+                ${f.auto ? `autocomplete="${f.auto}"` : ''} ${f.mode ? `inputmode="${f.mode}"` : ''}></label>`;
+    }
+
+    // Saves the profile locally and, when signed in, to the account
+    async function persistProfile(profile) {
+        localStorage.setItem('studentProfile', JSON.stringify(profile));
+        if (profile.name) localStorage.setItem('userProfileName', profile.name);
+        if (typeof updateNavAvatar === 'function') { try { updateNavAvatar(); } catch (e) { /* not ready */ } }
+        if (typeof renderProfileHeader === 'function') { try { renderProfileHeader(); } catch (e) { /* not ready */ } }
+
+        const user = window.AuthManager?.user;
+        if (!user || !window.supabaseClient) return 'Saved on this device';
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000));
+        try {
+            await Promise.race([Promise.all([
+                supabaseClient.auth.updateUser({ data: { full_name: profile.name || '', phone: profile.phone || '' } }),
+                supabaseClient.from('profiles').update({ full_name: profile.name || '' }).eq('id', user.id)
+            ]), timeout]);
+            if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e) { /* offline */ } }
+            return 'Saved and synced';
+        } catch (e) {
+            if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e2) { /* offline */ } }
+            return 'Saved · will sync when you are back online';
+        }
+    }
+
+    function toast(title, text) {
+        if (typeof showToast === 'function') showToast(title, text, { duration: 2500 });
+    }
+
+    function editField(key) {
+        const f = FIELDS[key];
+        if (!f) return;
+        const current = key === 'name' ? displayName() : (getProfile()[key] || '');
+        openSheet({
+            title: current ? `Edit ${f.label.toLowerCase()}` : `Add ${f.label.toLowerCase()}`,
+            sub: f.help || '',
+            body: input('pfSheetInput', f, current),
+            onSave: async () => {
+                let v = (document.getElementById('pfSheetInput')?.value || '').trim().replace(/\s+/g, ' ');
+                if (f.normalize) v = f.normalize(v);
+                if (f.required && !v) { sheetMsg(`${f.label} can't be empty.`, false); return true; }
+                const err = f.validate ? f.validate(v) : '';
+                if (err) { sheetMsg(err, false); return true; }
+                if (v === current) return false;
+                const profile = { ...getProfile(), [key]: v };
+                if (key !== 'name' && !profile.name && displayName()) profile.name = displayName();
+                const result = await persistProfile(profile);
+                render();
+                toast(`${f.label} ${v ? 'updated' : 'removed'}`, result);
+                return false;
+            }
+        });
     }
 
     function editDetails() {
-        const sec = document.getElementById('pfDetails');
-        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setTimeout(() => document.getElementById('pfName')?.focus(), 300);
+        document.getElementById('pfDetails')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    async function saveDetails(btn) {
-        const name = val('pfName');
-        const phoneRaw = val('pfPhone');
-        const phone = phoneRaw.replace(/[\s-]/g, '');
-        const semester = val('pfSemester');
-
-        if (!name) return msg('pfDetailsMsg', 'Please enter your name.', false);
-        if (phone && !/^(\+?\d{1,3})?\d{10}$/.test(phone)) return msg('pfDetailsMsg', 'Enter a valid 10-digit phone number.', false);
-        if (semester && (!/^\d+$/.test(semester) || +semester < 1 || +semester > 12)) return msg('pfDetailsMsg', 'Semester must be between 1 and 12.', false);
-
-        const profile = {
-            ...JSON.parse(localStorage.getItem('studentProfile') || '{}'),
-            name, phone,
-            regNo: val('pfRegNo'),
-            college: val('pfCollege'),
-            branch: val('pfBranch'),
-            semester
-        };
-        localStorage.setItem('studentProfile', JSON.stringify(profile));
-        if (typeof updateNavAvatar === 'function') updateNavAvatar();
-        localStorage.setItem('userProfileName', name);
-
+    function editEmail() {
         const user = window.AuthManager?.user;
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…'; }
-        if (user && window.supabaseClient) {
-            try {
-                await supabaseClient.auth.updateUser({ data: { full_name: name, phone } });
-                await supabaseClient.from('profiles').update({ full_name: name }).eq('id', user.id);
-            } catch (e) { console.warn('Profile cloud update failed:', e); }
-            if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e) { /* offline */ } }
-        }
-        if (typeof renderProfileHeader === 'function') { try { renderProfileHeader(); } catch (e) { /* dashboard not ready */ } }
-        render();
-        msg('pfDetailsMsg', user ? 'Saved and synced to your account.' : 'Saved on this device.', true);
+        if (!user) return signIn();
+        openSheet({
+            title: 'Change email',
+            sub: `Current: <strong>${esc(user.email)}</strong>. We'll send a confirmation link to the new address — the change completes when you open it.`,
+            body: input('pfSheetInput', { label: 'New email', type: 'email', placeholder: 'name@example.com', auto: 'email', mode: 'email' }, ''),
+            saveLabel: 'Send link',
+            onSave: async () => {
+                const email = (document.getElementById('pfSheetInput')?.value || '').trim().toLowerCase();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { sheetMsg('Enter a valid email address.', false); return true; }
+                if (email === user.email.toLowerCase()) { sheetMsg('That is already your email.', false); return true; }
+                if (!window.supabaseClient || !navigator.onLine) { sheetMsg("You're offline. Connect to the internet and try again.", false); return true; }
+                const { error } = await supabaseClient.auth.updateUser({ email });
+                if (error) { sheetMsg(error.message || 'Could not change email.', false); return true; }
+                sheetMsg(`Confirmation link sent to ${email}. Open it to finish.`, true);
+                setTimeout(closeSheet, 2500);
+                return true;
+            }
+        });
     }
 
-    function toggleSection(id) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.hidden = !el.hidden;
-        if (!el.hidden) el.querySelector('input')?.focus();
+    function editPassword() {
+        const user = window.AuthManager?.user;
+        if (!user) return signIn();
+        const pw = (id, label, auto) => `
+            <label class="pf-field"><span class="pf-field-label">${label}</span>
+                <span class="pf-pw">
+                    <input id="${id}" type="password" autocomplete="${auto}" placeholder="At least 8 characters">
+                    <button type="button" onclick="ProfilePage.togglePw('${id}', this)" aria-label="Show password"><i class="fa-regular fa-eye"></i></button>
+                </span>
+            </label>`;
+        openSheet({
+            title: 'Change password',
+            sub: 'Use at least 8 characters with a mix of letters and numbers.',
+            body: pw('pfNewPw', 'New password', 'new-password') + pw('pfNewPw2', 'Confirm new password', 'new-password') +
+                '<div class="pf-strength"><i id="pfStrengthBar"></i></div><span class="pf-field-hint" id="pfStrengthText"></span>',
+            saveLabel: 'Update password',
+            onSave: async () => {
+                const a = document.getElementById('pfNewPw')?.value || '';
+                const b = document.getElementById('pfNewPw2')?.value || '';
+                if (a.length < 8) { sheetMsg('Password must be at least 8 characters.', false); return true; }
+                if (!/[A-Za-z]/.test(a) || !/\d/.test(a)) { sheetMsg('Use both letters and numbers.', false); return true; }
+                if (a !== b) { sheetMsg("Passwords don't match.", false); return true; }
+                if (!navigator.onLine) { sheetMsg("You're offline. Connect to the internet and try again.", false); return true; }
+                const { error } = await AuthManager.updatePassword(a);
+                if (error) { sheetMsg(error.message || 'Could not update password.', false); return true; }
+                toast('Password updated', 'Use it next time you sign in');
+                return false;
+            }
+        });
+        const first = document.getElementById('pfNewPw');
+        first?.addEventListener('input', () => {
+            const v = first.value;
+            const score = (v.length >= 8) + (v.length >= 12) + (/[a-z]/.test(v) && /[A-Z]/.test(v)) + /\d/.test(v) + /[^A-Za-z0-9]/.test(v);
+            const levels = [['', 0], ['Weak', 25], ['Weak', 25], ['Fair', 50], ['Good', 75], ['Strong', 100]];
+            const [word, w] = levels[score];
+            const bar = document.getElementById('pfStrengthBar');
+            if (bar) { bar.style.width = (v ? w : 0) + '%'; bar.dataset.level = word.toLowerCase(); }
+            const t = document.getElementById('pfStrengthText');
+            if (t) t.textContent = v ? `Strength: ${word}` : '';
+        });
     }
 
     function togglePw(id, btn) {
-        const input = document.getElementById(id);
-        if (!input) return;
-        const show = input.type === 'password';
-        input.type = show ? 'text' : 'password';
+        const el = document.getElementById(id);
+        if (!el) return;
+        const show = el.type === 'password';
+        el.type = show ? 'text' : 'password';
         btn.innerHTML = `<i class="fa-regular ${show ? 'fa-eye-slash' : 'fa-eye'}"></i>`;
-    }
-
-    async function changeEmail(btn) {
-        const email = val('pfNewEmail');
-        const user = window.AuthManager?.user;
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return msg('pfEmailMsg', 'Enter a valid email address.', false);
-        if (user && email.toLowerCase() === user.email.toLowerCase()) return msg('pfEmailMsg', 'That is already your email.', false);
-        if (!window.supabaseClient) return msg('pfEmailMsg', 'You are offline. Try again later.', false);
-        btn.disabled = true;
-        try {
-            const { error } = await supabaseClient.auth.updateUser({ email });
-            if (error) throw error;
-            msg('pfEmailMsg', `Confirmation sent to ${email}. Open the link to finish the change.`, true);
-        } catch (e) {
-            msg('pfEmailMsg', e.message || 'Could not change email.', false);
-        }
-        btn.disabled = false;
-    }
-
-    async function changePassword(btn) {
-        const pw = document.getElementById('pfNewPw')?.value || '';
-        const pw2 = document.getElementById('pfNewPw2')?.value || '';
-        if (pw.length < 6) return msg('pfPwMsg', 'Password must be at least 6 characters.', false);
-        if (pw !== pw2) return msg('pfPwMsg', 'Passwords do not match.', false);
-        btn.disabled = true;
-        try {
-            const { error } = await AuthManager.updatePassword(pw);
-            if (error) throw error;
-            document.getElementById('pfNewPw').value = '';
-            document.getElementById('pfNewPw2').value = '';
-            msg('pfPwMsg', 'Password updated.', true);
-        } catch (e) {
-            msg('pfPwMsg', e.message || 'Could not update password.', false);
-        }
-        btn.disabled = false;
     }
 
     window.ProfilePage = {
         render, run, toggleTheme, restore, signIn, syncNow, signOut, deleteAccount,
-        editDetails, saveDetails, toggleSection, togglePw, changeEmail, changePassword
+        editDetails, editField, editEmail, editPassword, togglePw, closeSheet, submitSheet
     };
 
     // Keep the page current when it is visible

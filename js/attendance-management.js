@@ -912,6 +912,12 @@
             .pg-table th:first-child, .pg-table td.pg-date-cell { position: sticky; left: 0; z-index: 1; background: var(--card-bg); }
             .pg-table thead th:first-child { z-index: 3; background: var(--light-bg); }
             .pg-table tr.pg-row-today td.pg-date-cell { background: var(--primary-grad-start, #4f46e5); color: #fff; }
+            .pg-start-missing { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.10); }
+            .pg-start-missing > i { color: #d97706; font-size: 1.2rem; }
+            .pg-start-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; text-align: left; }
+            .pg-start-text span { opacity: 0.8; }
+            .pg-start-missing button { flex-shrink: 0; border: none; border-radius: 10px; padding: 9px 14px; font: inherit; font-weight: 600; color: #fff; background: linear-gradient(135deg, #4f46e5, #3b82f6); cursor: pointer; }
+            @media (max-width: 560px) { .pg-start-missing { flex-wrap: wrap; } .pg-start-missing button { width: 100%; } }
             .pg-cell { line-height: 1.05; }
             .pg-cell .pg-sub { display: block; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.2px; opacity: 0.85; }
             .pg-cell .pg-st { display: block; font-size: 0.82rem; font-weight: 800; }
@@ -998,6 +1004,15 @@
             <div class="ams-section-header" style="justify-content: center; text-align: center; display: block;">
                 <div class="ams-section-subtitle">Tap a cell to change its status · tap a date for the whole day.</div>
             </div>
+            ${!(sc.portalSetup?.semesterStartDate || sc.startDate) ? `
+            <div class="pg-start-missing">
+                <i class="fa-solid fa-calendar-plus"></i>
+                <div class="pg-start-text">
+                    <strong>Semester start date not set</strong>
+                    <span>Showing from ${formatDateDisplay(start)}. Add the date your classes began to mark every day from the start.</span>
+                </div>
+                <button type="button" onclick="window.askSemesterStart && askSemesterStart({ force: true })">Set start date</button>
+            </div>` : ''}
             
             <div class="pg-range-info">
                 <i class="fa-regular fa-calendar"></i> ${formatDateDisplay(start)} &rarr; ${formatDateDisplay(end)}
@@ -1545,6 +1560,8 @@ function renderFilterSection(sc) {
     // ===============================================
     // EVENT HANDLERS (exposed on window)
     // ===============================================
+
+    window.amsRefresh = function () { renderAll(); };
 
     window.amsNavigate = function(view) {
         amsCurrentView = view;

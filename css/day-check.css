@@ -996,3 +996,72 @@ body.dark-mode .ac-backdrop {
 @keyframes srSpin {
     to { transform: rotate(360deg); }
 }
+
+/* ---- "Can skip" column + summary ---- */
+.sr-pct { width: 38%; }
+
+.sr-table th:last-child,
+.sr-skip {
+    text-align: center;
+    width: 16%;
+}
+
+.sr-skip strong {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.sr-skip small {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.68rem;
+    color: var(--sr-muted);
+    white-space: nowrap;
+}
+
+.sr-skip-ok strong { color: var(--sr-safe); }
+.sr-skip-low strong { color: var(--sr-warn); }
+.sr-skip-none strong { color: var(--sr-danger); }
+
+.sr-skip-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.09);
+}
+
+.sr-skip-banner > i {
+    font-size: 1.2rem;
+    color: var(--sr-safe);
+}
+
+.sr-skip-banner div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.85rem;
+}
+
+.sr-skip-banner span {
+    color: var(--sr-muted);
+}
+
+.sr-skip-banner-warn {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.10);
+}
+
+.sr-skip-banner-warn > i {
+    color: var(--sr-warn);
+}
+
+@media (max-width: 420px) {
+    .sr-skip strong { font-size: 1.05rem; }
+    .sr-skip small { font-size: 0.62rem; white-space: normal; }
+}

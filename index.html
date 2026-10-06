@@ -32,6 +32,7 @@
 
     <script src="js/auth-manager.js"></script>
     <script src="js/sync-manager.js?v=5"></script>
+    <script src="js/odml-view.js?v=1"></script>
     <script src="js/social-manager.js"></script>
     <!-- Firebase SDK for Cloud Messaging -->
     <script type="module">
@@ -4526,7 +4527,7 @@
         .bk-splash {
             position: fixed;
             inset: 0;
-            z-index: 2;
+            z-index: 2147483000;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -4606,11 +4607,12 @@
             animation: bkCardIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) 2.7s both;
         }
 
-        #loginScreen.bk-skip .bk-splash {
+        body.bk-skip .bk-splash {
             animation: bkSplashOut 0.3s ease forwards;
         }
 
-        #loginScreen.bk-skip .login-container {
+        body.bk-skip #loginScreen .login-container,
+        body.bk-splash-done #loginScreen .login-container {
             animation-delay: 0.1s;
         }
 
@@ -4846,6 +4848,35 @@
         /* --- Timetable Mode --- */
         #ttModeBanner {
             margin-bottom: 20px;
+        }
+
+.results-odml-switch {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+        }
+
+.sem-start-modal { max-width: 420px; text-align: center; }
+        .sem-start-icon { width: 56px; height: 56px; margin: 4px auto 12px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 1.4rem; background: linear-gradient(135deg, #6366f1, #3b82f6); box-shadow: 0 12px 26px -10px rgba(79, 70, 229, 0.7); }
+        .sem-start-modal h2 { margin: 0 0 8px; font-size: 1.3rem; }
+        .sem-start-modal > p { margin: 0 0 16px; font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); }
+        .sem-start-field { display: flex; flex-direction: column; gap: 6px; text-align: left; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+        .sem-start-field input { padding: 12px; border-radius: 12px; font-size: 1rem; }
+        .sem-start-msg { min-height: 1.1em; margin: 8px 0 0; font-size: 0.82rem; color: #dc2626; }
+        .sem-start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+
+        #classReminderBanner {
+            margin-bottom: 20px;
+        }
+
+        .cr-banner {
+            border-color: rgba(245, 158, 11, 0.45);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.10), rgba(99, 102, 241, 0.06)), var(--dash-card-bg, #fff);
+        }
+
+        .cr-banner .ttm-banner-icon {
+            background: linear-gradient(135deg, #f59e0b, #f97316);
         }
 
         .ttm-banner {
@@ -6338,13 +6369,14 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="css/dashboard-redesign.css?v=9">
+    <link rel="stylesheet" href="css/dashboard-redesign.css?v=10">
     <link rel="stylesheet" href="css/attendance-management.css?v=6">
     <link rel="stylesheet" href="css/smart-search.css?v=7">
+    <link rel="stylesheet" href="css/smart-search-modern.css?v=3">
     <link rel="stylesheet" href="css/timetable-modes.css?v=6">
-    <link rel="stylesheet" href="css/profile-page.css?v=6">
-    <link rel="stylesheet" href="css/subjects-page.css?v=3">
-    <link rel="stylesheet" href="css/day-check.css?v=7">
+    <link rel="stylesheet" href="css/profile-page.css?v=7">
+    <link rel="stylesheet" href="css/subjects-page.css?v=4">
+    <link rel="stylesheet" href="css/day-check.css?v=8">
     <link rel="stylesheet" href="css/onboarding.css?v=1">
 </head>
 
@@ -6392,20 +6424,40 @@
         </div>
     </div>
 
-    <div id="loginScreen" class="login-screen" style="display: none;">
-        <!-- Animated Welcome Splash (plays each time the login screen opens; tap to skip) -->
-        <div class="bk-splash" id="bkSplash" onclick="this.closest('.login-screen').classList.add('bk-skip')">
-            <div class="bk-splash-logo-wrap">
-                <span class="bk-splash-ring"></span>
-                <span class="bk-splash-ring bk-splash-ring-2"></span>
-                <img src="icon-192x192.png" alt="Bunkit" class="bk-splash-logo">
-            </div>
-            <h1 class="bk-splash-title" aria-label="Bunkit">
-                <span>B</span><span>u</span><span>n</span><span>k</span><span>i</span><span>t</span>
-            </h1>
-            <p class="bk-splash-tagline">Bunk smart. Never fall short.</p>
+        <!-- Animated Welcome Splash (plays on every open / reload; tap to skip) -->
+    <div class="bk-splash" id="bkSplash" onclick="document.body.classList.add('bk-skip')" role="presentation">
+        <div class="bk-splash-logo-wrap">
+            <span class="bk-splash-ring"></span>
+            <span class="bk-splash-ring bk-splash-ring-2"></span>
+            <img src="icon-192x192.png" alt="Bunkit" class="bk-splash-logo">
         </div>
+        <h1 class="bk-splash-title" aria-label="Bunkit">
+            <span>B</span><span>u</span><span>n</span><span>k</span><span>i</span><span>t</span>
+        </h1>
+        <p class="bk-splash-tagline">Bunk smart. Never fall short.</p>
+    </div>
 
+    <script>
+        // Splash ends after its animation (or on tap); later steps wait for 'bk-splash-done'
+        (function () {
+            var done = false;
+            function end() {
+                if (done) return;
+                done = true;
+                document.body.classList.add('bk-splash-done');
+                var el = document.getElementById('bkSplash');
+                if (el) el.remove();
+                window.dispatchEvent(new Event('bk-splash-done'));
+            }
+            window.bkSplashEnd = end;
+            var el = document.getElementById('bkSplash');
+            if (!el) { end(); return; }
+            el.addEventListener('animationend', function (e) { if (e.animationName === 'bkSplashOut') end(); });
+            setTimeout(end, 3400); // safety net
+        })();
+    </script>
+
+    <div id="loginScreen" class="login-screen" style="display: none;">
         <div class="login-container lg-card">
             <div class="lg-header">
                 <img src="icon-192x192.png" alt="Bunkit" class="login-logo-img">
@@ -7031,6 +7083,9 @@
                 </div>
             </div>
 
+            <!-- No class yet: keep reminding -->
+            <div id="classReminderBanner" hidden></div>
+
             <!-- Timetable mode reminder (monthly review / daily entry) -->
             <div id="ttModeBanner" hidden></div>
 
@@ -7071,10 +7126,7 @@
                 <div class="dash-subject-card">
                     <div class="dash-section-header">
                         <div class="dash-title"><i class="fa-solid fa-book-open"></i> Subject-wise Attendance</div>
-                        <div class="dash-subj-legend">
-                            <span><i class="orig"></i> Original = present only</span>
-                            <span><i class="with"></i> With OD/ML = Duty + Medical leave counted</span>
-                        </div>
+                        <div id="dashOdmlToggle"></div>
                     </div>
                     <div class="dash-subj-list" id="dashSubjectTableBody">
                         <!-- Populated by JS -->
@@ -7625,6 +7677,7 @@
                         <p>Ask about your attendance in plain English</p>
                     </div>
                     <span class="si-header-badge"><i class="fa-solid fa-lock"></i> On-device</span>
+                    <div id="siOdmlToggle" class="si-odml-slot"></div>
                 </header>
 
                 <!-- Chat -->
@@ -8120,6 +8173,7 @@
             }
 
             function renderDashboard() {
+                if (typeof renderClassReminder === 'function') renderClassReminder();
                 if (typeof renderTimetableModeBanner === 'function') renderTimetableModeBanner();
                 let displayClass = selectedClass;
                 let displayAnalysis = currentAnalysisData;
@@ -8308,14 +8362,14 @@
                                 <span class="dash-badge ${statusClass}">${statusBadge}</span>
                             </div>
                             <div class="dash-srow-metrics">
-                                <div class="dash-metric">
+                                <div class="dash-metric odv-orig">
                                     <div class="dash-metric-label">Original <em>present only</em></div>
                                     <div class="dash-metric-value" style="color:${colorOf(origClass)}">${split.withoutPct.toFixed(1)}%</div>
                                     <div class="dash-metric-bar"><span style="width:${split.withoutPct}%; background:${colorOf(origClass)}"></span><i style="left:${minAttendance}%"></i></div>
                                     <div class="dash-metric-sub">${split.present} / ${split.totalHeld} present</div>
                                 </div>
-                                <div class="dash-metric">
-                                    <div class="dash-metric-label">With OD/ML</div>
+                                <div class="dash-metric odv-with">
+                                    <div class="dash-metric-label"><span class="odv-both">With OD/ML</span><span class="odv-plain">Attendance</span></div>
                                     <div class="dash-metric-value" style="color:${colorOf(statusClass)}">${percent.toFixed(1)}%</div>
                                     <div class="dash-metric-bar"><span style="width:${percent}%; background:${colorOf(statusClass)}"></span><i style="left:${minAttendance}%"></i></div>
                                     <div class="dash-metric-sub">${split.capped
@@ -8334,6 +8388,9 @@
                 });
 
                 subjectList.innerHTML = rowsHtml;
+                const odmlToggleSlot = document.getElementById('dashOdmlToggle');
+                if (odmlToggleSlot && window.OdmlView) odmlToggleSlot.innerHTML = OdmlView.toggleHTML();
+                if (window.OdmlView) OdmlView.refresh(currentAnalysisData);
 
                 const overall = attendanceSplit(totalAttended, totalHeld, totalOdml);
                 overall.withPct = totalHeld ? (totalEffective / totalHeld) * 100 : 0;
@@ -8352,26 +8409,27 @@
                             <p class="dash-hero-msg">${message}</p>
                             <div class="dash-hero-chips">
                                 <span><i class="fa-solid fa-user-check"></i> ${overall.present} present</span>
-                                <span><i class="fa-solid fa-briefcase-medical"></i> ${overall.odml} OD/ML</span>
+                                <span class="odv-both"><i class="fa-solid fa-briefcase-medical"></i> ${overall.odml} OD/ML</span>
                                 <span><i class="fa-solid fa-chalkboard"></i> ${totalHeld} held</span>
                             </div>
                         </div>
                         <div class="dash-hero-rings">
-                            <div class="dash-hero-ring">
+                            <div class="dash-hero-ring odv-orig">
                                 ${ring(overall.withoutPct, colorOf(origClass))}
                                 <span class="dash-hero-ring-label">Original</span>
                             </div>
-                            <div class="dash-hero-ring">
+                            <div class="dash-hero-ring odv-with">
                                 ${ring(overall.withPct, colorOf(overallClass))}
-                                <span class="dash-hero-ring-label">With OD/ML</span>
+                                <span class="dash-hero-ring-label"><span class="odv-both">With OD/ML</span><span class="odv-plain">Overall</span></span>
                             </div>
+                            ${window.OdmlView ? OdmlView.toggleHTML('odml-toggle-light dash-hero-toggle') : ''}
                         </div>
                     </div>
                     <div class="dash-stat-card">
                         <div class="dash-stat-icon dash-icon-safe"><i class="fa-solid fa-book-open"></i></div>
                         <div>
-                            <div class="dash-stat-value">${overall.attended}<small>/${totalHeld}</small></div>
-                            <div class="dash-stat-title">Classes attended</div>
+                            <div class="dash-stat-value"><span class="odv-with">${overall.attended}</span><span class="odv-orig">${overall.present}</span><small>/${totalHeld}</small></div>
+                            <div class="dash-stat-title">Classes attended<span class="odv-both"><span class="odv-with"> · incl. OD/ML</span><span class="odv-orig"> · present only</span></span></div>
                         </div>
                     </div>
                     <div class="dash-stat-card">
@@ -9054,7 +9112,39 @@
             }
 
             let isCheckingOnboarding = false;
+            function hasAnyClass() {
+                return !!selectedClass || (typeof classes !== 'undefined' && Object.keys(classes).length > 0);
+            }
+            window.hasAnyClass = hasAnyClass;
+
+            // "Set up your class" banner on the dashboard while there is no class
+            function renderClassReminder() {
+                const el = document.getElementById('classReminderBanner');
+                if (!el) return;
+                if (hasAnyClass()) { el.hidden = true; el.innerHTML = ''; return; }
+                el.innerHTML = `
+                    <div class="ttm-banner cr-banner">
+                        <div class="ttm-banner-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                        <div class="ttm-banner-text">
+                            <strong>Set up your class to start</strong>
+                            <span>Add your subjects and timetable — Bunkit then tracks attendance and tells you how many classes you can skip.</span>
+                        </div>
+                        <div class="ttm-banner-actions">
+                            <button class="cqr-btn" onclick="openQRScanner()"><i class="fa-solid fa-camera"></i> Scan QR</button>
+                            <button class="cqr-btn cqr-btn-primary" onclick="Onboarding.start({ step: 'class' })"><i class="fa-solid fa-plus"></i> Set up class</button>
+                        </div>
+                    </div>`;
+                el.hidden = false;
+            }
+            window.renderClassReminder = renderClassReminder;
+
             function checkFirstLoginPrompt() {
+                // Let the welcome animation finish first
+                if (!document.body.classList.contains('bk-splash-done')) {
+                    window.addEventListener('bk-splash-done', () => checkFirstLoginPrompt(), { once: true });
+                    return;
+                }
+                renderClassReminder();
                 // Wait until the user has chosen Sign in or Continue as guest:
                 // never open the setup popup behind the welcome / login screen
                 const loginScreen = document.getElementById('loginScreen');
@@ -9069,9 +9159,7 @@
                 isCheckingOnboarding = true;
                 setTimeout(() => { isCheckingOnboarding = false; }, 3000);
 
-                // Check if user has already completed onboarding
-                const hasCompleted = localStorage.getItem('hasCompletedOnboarding');
-                if (hasCompleted === 'true') return;
+                // No early return on "onboarding done": without a class we keep reminding
 
                 // PRIORITY 1: If a class import is pending, handle it
                 const pendingImport = sessionStorage.getItem('pendingClassImport');
@@ -9120,19 +9208,16 @@
                     }
                 }
 
-                if (forceOnboarding || isNewUser || !user) {
-                    // Cleanup flag
-                    localStorage.removeItem('forceOnboarding');
-                } else {
-                    // Standard Login with no data -> Show subtle empty state prompt (not modal)
-                    console.log("🚫 Standard Login (Old Account + No Data). Showing empty state prompt.");
+                if (forceOnboarding) localStorage.removeItem('forceOnboarding');
 
-                    // Show a subtle toast after a short delay to guide user
+                // "Later" snoozes the setup screen for this visit only; the banner stays
+                if (sessionStorage.getItem('ob_snoozed') === '1') return;
+
+                // Signed-in users: give cloud sync a moment to bring classes down first
+                if (user && !forceOnboarding && !isNewUser) {
                     setTimeout(() => {
-                        if (typeof showToast === 'function') {
-                            showToast('👋 Welcome back!', 'Tap "Add Class" to get started', { duration: 5000 });
-                        }
-                    }, 1500);
+                        if (!hasAnyClass() && sessionStorage.getItem('ob_snoozed') !== '1' && window.Onboarding) Onboarding.start({ step: 'class' });
+                    }, 2500);
                     return;
                 }
 
@@ -11355,6 +11440,94 @@
                 initDashboard();
             }
 
+            // Ask for the semester start when a class doesn't have one
+            // (QR codes and links from older versions don't include it), so
+            // period-wise attendance runs from the real start, not from today.
+            function askSemesterStart(opts = {}) {
+                const name = document.getElementById('classSelector')?.value;
+                const cls = name && classes[name];
+                if (!cls) return;
+                const hasStart = cls.portalSetup?.semesterStartDate || cls.startDate;
+                if (hasStart && !opts.force) return;
+                const key = `semStartAsked_${name}`;
+                if (!opts.force && sessionStorage.getItem(key)) return;
+
+                // Wait until nothing else is on screen (welcome animation, login, onboarding, other popups)
+                const login = document.getElementById('loginScreen');
+                const busy = !document.body.classList.contains('bk-splash-done')
+                    || (login && getComputedStyle(login).display !== 'none')
+                    || document.getElementById('onboarding')?.classList.contains('ob-open')
+                    || document.querySelector('.modal.active');
+                if (busy && !opts.force) {
+                    const tries = (opts.tries || 0) + 1;
+                    if (tries < 40) setTimeout(() => askSemesterStart({ ...opts, tries }), 1500);
+                    return;
+                }
+                sessionStorage.setItem(key, '1');
+
+                const today = formatLocalDate(new Date());
+                let firstLog = '';
+                try { firstLog = Object.keys(JSON.parse(localStorage.getItem('attendance_logs') || '{}')).sort()[0] || ''; } catch (e) { firstLog = ''; }
+                const current = cls.portalSetup?.semesterStartDate || cls.startDate || (firstLog && firstLog <= today ? firstLog : '');
+                const maxDate = cls.lastDate && cls.lastDate < today ? cls.lastDate : today;
+
+                let modal = document.getElementById('semStartModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'semStartModal';
+                    modal.className = 'modal';
+                    document.body.appendChild(modal);
+                }
+                const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                modal.innerHTML = `
+                    <div class="modal-content sem-start-modal">
+                        <button class="modal-close" onclick="closeModal('semStartModal')">&times;</button>
+                        <div class="sem-start-icon"><i class="fa-solid fa-calendar-plus"></i></div>
+                        <h2>When did your semester start?</h2>
+                        <p><strong>${esc(name)}</strong> doesn't have a start date${opts.force ? '' : ' (the class QR / link didn\'t include it)'}. Set it so attendance is tracked from the first day of classes${cls.lastDate ? ` to ${new Date(cls.lastDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}.</p>
+                        <label class="sem-start-field">
+                            <span>Semester start date</span>
+                            <input type="date" id="semStartInput" value="${current}" max="${maxDate}">
+                        </label>
+                        <p class="sem-start-msg" id="semStartMsg"></p>
+                        <div class="sem-start-actions">
+                            <button class="btn secondary-btn" onclick="closeModal('semStartModal')">Later</button>
+                            <button class="btn primary-btn" onclick="saveSemesterStart()"><i class="fa-solid fa-check"></i> Save</button>
+                        </div>
+                    </div>`;
+                openModal('semStartModal');
+                setTimeout(() => document.getElementById('semStartInput')?.focus(), 250);
+            }
+            window.askSemesterStart = askSemesterStart;
+
+            function saveSemesterStart() {
+                const name = document.getElementById('classSelector')?.value;
+                const cls = name && classes[name];
+                const input = document.getElementById('semStartInput');
+                const msg = document.getElementById('semStartMsg');
+                const v = input?.value || '';
+                const today = formatLocalDate(new Date());
+                if (!cls) return;
+                if (!v) { if (msg) msg.textContent = 'Pick the date your classes started.'; return; }
+                if (v > today) { if (msg) msg.textContent = "The start date can't be in the future."; return; }
+                if (cls.lastDate && v > cls.lastDate) { if (msg) msg.textContent = 'The start date must be before the last working day.'; return; }
+
+                cls.portalSetup = { ...(cls.portalSetup || {}), semesterStartDate: v };
+                if (selectedClass && selectedClass !== cls && (selectedClass.name === name || !selectedClass.name)) {
+                    selectedClass.portalSetup = { ...(selectedClass.portalSetup || {}), semesterStartDate: v };
+                }
+                cls.updatedAt = Date.now();
+                saveToStorage();
+                const startInput = document.getElementById('startDate');
+                if (startInput) startInput.value = v;
+                closeModal('semStartModal');
+                try { if (typeof window.amsRefresh === 'function') window.amsRefresh(); } catch (e) { /* not on that page */ }
+                try { if (typeof renderDashboard === 'function') renderDashboard(); } catch (e) { /* ignore */ }
+                try { if (typeof triggerRecalculation === 'function') triggerRecalculation(); } catch (e) { /* ignore */ }
+                showToast('Start date saved', `Attendance now runs from ${new Date(v + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`, { duration: 3000 });
+            }
+            window.saveSemesterStart = saveSemesterStart;
+
             function onClassChange() {
                 const className = document.getElementById('classSelector').value;
                 resultsTableOnly = false;
@@ -11428,6 +11601,8 @@
                         updatePeriodViewMenuVisibility();
                     }
                 }
+                // Imported classes (older QR codes / links) may not carry a semester start date
+                if (className && classes[className] && typeof askSemesterStart === 'function') setTimeout(() => askSemesterStart(), 1500);
             }
 
             // --- OCR & CORE CALCULATIONS ---
@@ -11589,7 +11764,7 @@
                     return (v ? parseLocalDate(v) : new Date()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                 })();
 
-                let tAtt = 0, tHeld = 0, tEff = 0;
+                let tAtt = 0, tHeld = 0, tEff = 0, tSkip = 0, lowest = null;
                 const rows = currentAnalysisData.map(sub => {
                     const split = attendanceSplit(sub.attended, sub.totalHeld, sub.odml, sub.remaining);
                     const { stats } = getSubjectAnalysis(sub.attended, sub.totalHeld, sub.remaining, null, sub.odml);
@@ -11599,7 +11774,12 @@
                     if (!split.totalHeld) { cls = 'none'; label = 'No data'; detail = ''; }
                     else if (stats.stillNeed > stats.remaining) { cls = 'danger'; label = `Can't reach ${min}%`; detail = `even attending all ${stats.remaining}`; }
                     else if (pct < min) { cls = 'warn'; label = `Attend ${stats.stillNeed} more`; detail = `of ${stats.remaining} left`; }
-                    else { cls = 'safe'; label = 'Safe'; detail = `can miss ${stats.maxSkippable}`; }
+                    else { cls = 'safe'; label = 'Safe'; detail = ''; }
+                    const skip = split.totalHeld ? Math.max(0, stats.maxSkippable) : 0;
+                    tSkip += skip;
+                    if (split.totalHeld && (!lowest || skip < lowest.skip)) lowest = { name: sub.name, skip };
+                    const skipCell = !split.totalHeld ? '<td class="sr-skip">—</td>'
+                        : `<td class="sr-skip sr-skip-${skip === 0 ? 'none' : skip <= 2 ? 'low' : 'ok'}"><strong>${skip}</strong><small>${skip === 0 ? (stats.stillNeed > 0 ? `attend ${Math.min(stats.stillNeed, stats.remaining)}` : 'no margin') : `of ${stats.remaining} left`}</small></td>`;
                     return `
                         <tr>
                             <td class="sr-subj"><strong>${esc(sub.name)}</strong><span>${esc(sub.code)}</span></td>
@@ -11609,10 +11789,14 @@
                                 <i class="sr-bar"><b style="width:${Math.min(100, pct)}%"></b><u style="left:${min}%"></u></i>
                                 ${detail ? `<small>${detail}</small>` : ''}
                             </td>
+                            ${skipCell}
                         </tr>`;
                 }).join('');
                 const overall = tHeld ? (tEff / tHeld) * 100 : 0;
                 const overallCls = overall >= min ? 'safe' : overall >= min - 5 ? 'warn' : 'danger';
+                const skipSummary = !lowest ? '' : lowest.skip === 0
+                    ? `<div class="sr-skip-banner sr-skip-banner-warn"><i class="fa-solid fa-triangle-exclamation"></i><div><strong>No safe skips in ${esc(lowest.name)}</strong><span>${tSkip > 0 ? `You can still skip ${tSkip} class${tSkip !== 1 ? 'es' : ''} in other subjects` : 'Attend every class until you are back above ' + min + '%'}.</span></div></div>`
+                    : `<div class="sr-skip-banner"><i class="fa-solid fa-person-walking-arrow-right"></i><div><strong>You can skip ${tSkip} class${tSkip !== 1 ? 'es' : ''} this semester</strong><span>Lowest margin: ${esc(lowest.name)} — only ${lowest.skip} skip${lowest.skip !== 1 ? 's' : ''}.</span></div></div>`;
 
                 section.innerHTML = `
                     <div class="sr-card">
@@ -11622,14 +11806,16 @@
                                 <p>${esc(getActiveClassKey() || '')} · as of ${dateLabel} · minimum ${min}%</p>
                             </div>
                         </div>
+                        ${skipSummary}
                         <div class="sr-table-wrap">
                             <table class="sr-table">
-                                <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th></tr></thead>
+                                <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th><th>Can skip</th></tr></thead>
                                 <tbody>${rows}</tbody>
                                 <tfoot><tr>
                                     <td class="sr-subj"><strong>Overall</strong><span>${currentAnalysisData.length} subjects</span></td>
                                     <td class="sr-num">${tAtt}<span>/${tHeld}</span></td>
                                     <td class="sr-pct sr-${overallCls}"><strong>${overall.toFixed(1)}%</strong></td>
+                                    <td class="sr-skip"><strong>${tSkip}</strong><small>in total</small></td>
                                 </tr></tfoot>
                             </table>
                         </div>
@@ -11669,17 +11855,28 @@
                 const min = getMinAttendanceCriteria() * 100;
                 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
                 let tP = 0, tT = 0;
+                const m = min / 100;
+                let tSkipNow = 0;
                 const rows = codes.map(code => {
                     const d = merged[code];
                     const present = Math.min(Number(d.present) || 0, Number(d.total) || 0), total = Number(d.total) || 0;
                     tP += present; tT += total;
                     const pct = total ? (present / total) * 100 : 0;
                     const cls = pct >= min ? 'safe' : pct >= min - 5 ? 'warn' : 'danger';
+                    // No timetable yet: classes in a row you can miss now (P / (T + k) >= min),
+                    // or classes in a row you must attend to get back to it ((P + a) / (T + a) >= min)
+                    const skipNow = m > 0 ? Math.max(0, Math.floor(present / m - total + 1e-9)) : 0;
+                    const needNow = pct >= min || m >= 1 ? 0 : Math.ceil((m * total - present) / (1 - m) - 1e-9);
+                    tSkipNow += skipNow;
+                    const skipCell = needNow > 0
+                        ? `<td class="sr-skip sr-skip-none"><strong>0</strong><small>attend ${needNow} in a row</small></td>`
+                        : `<td class="sr-skip sr-skip-${skipNow <= 2 ? 'low' : 'ok'}"><strong>${skipNow}</strong><small>right now</small></td>`;
                     return `<tr>
                         <td class="sr-subj"><strong>${esc(d.name || code)}</strong><span>${esc(code)}</span></td>
                         <td class="sr-num">${present}<span>/${total}</span></td>
                         <td class="sr-pct sr-${cls}"><div class="sr-pct-top"><strong>${pct.toFixed(1)}%</strong><span class="sr-pill sr-${cls}">${pct >= min ? 'Safe' : `Below ${min}%`}</span></div>
                             <i class="sr-bar"><b style="width:${Math.min(100, pct)}%"></b><u style="left:${min}%"></u></i></td>
+                        ${skipCell}
                     </tr>`;
                 }).join('');
                 const overall = tT ? (tP / tT) * 100 : 0;
@@ -11687,12 +11884,13 @@
                     <div class="sr-card sr-flat">
                         <div class="sr-head"><h2>📸 Results from your screenshot</h2><p>${codes.length} subjects · minimum ${min}%</p></div>
                         <div class="sr-table-wrap"><table class="sr-table">
-                            <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th></tr></thead>
+                            <thead><tr><th>Subject</th><th>Attended</th><th>Attendance</th><th>Can skip</th></tr></thead>
                             <tbody>${rows}</tbody>
                             <tfoot><tr><td class="sr-subj"><strong>Overall</strong><span>${codes.length} subjects</span></td><td class="sr-num">${tP}<span>/${tT}</span></td>
-                                <td class="sr-pct sr-${overall >= min ? 'safe' : 'warn'}"><strong>${overall.toFixed(1)}%</strong></td></tr></tfoot>
+                                <td class="sr-pct sr-${overall >= min ? 'safe' : 'warn'}"><strong>${overall.toFixed(1)}%</strong></td>
+                                <td class="sr-skip"><strong>${tSkipNow}</strong><small>right now</small></td></tr></tfoot>
                         </table></div>
-                        <p class="sr-note">Add your class to see how many classes you can miss or need, based on your timetable. These numbers are filled in automatically.</p>
+                        <p class="sr-note">"Can skip" here = classes in a row you can miss from today and stay at ${min}%. Add your class to see skips for the whole semester, based on your timetable.</p>
                         <button class="btn primary-btn sr-cta" onclick="createClassFromScreenshot()">➕ Create my class from these subjects</button>
                     </div>`);
             }
@@ -11897,7 +12095,8 @@
 
             function displayPerSubjectAnalysis() {
                 const container = document.getElementById('analysisResults');
-                container.innerHTML = ''; // Clear previous cards
+                container.innerHTML = window.OdmlView ? `<div class="results-odml-switch">${OdmlView.toggleHTML()}</div>` : '';
+                if (window.OdmlView) OdmlView.refresh(currentAnalysisData);
 
                 currentAnalysisData.forEach(subject => {
                     const { alertClass, alertMessage, stats } = getSubjectAnalysis(subject.attended, subject.totalHeld, subject.remaining, null, subject.odml);
@@ -11905,8 +12104,8 @@
                     <div class="subject-card">
                         <div class="subject-title">${subject.name} (${subject.code})</div>
                         <div class="stats-grid">
-                            ${generateStatItemHTML(`currentPercent_${subject.code}`, 'Current % (with OD/ML)', stats.currentPercent.toFixed(1) + '%', 'Attendance so far, counting Duty Leave and Medical Leave as attended.')}
-                            ${generateStatItemHTML(`withoutPercent_${subject.code}`, 'Without OD/ML %', attendanceSplit(subject.attended, subject.totalHeld, subject.odml).withoutPct.toFixed(1) + '%', 'Attendance so far counting only classes you were present in (no Duty Leave or Medical Leave).')}
+                            <div class="odv-with" style="display:contents">${generateStatItemHTML(`currentPercent_${subject.code}`, 'Current %<span class="odv-both"> (with OD/ML)</span>', stats.currentPercent.toFixed(1) + '%', 'Attendance so far, counting Duty Leave and Medical Leave as attended.')}</div>
+                            <div class="odv-orig" style="display:contents">${generateStatItemHTML(`withoutPercent_${subject.code}`, 'Current % (original)', attendanceSplit(subject.attended, subject.totalHeld, subject.odml).withoutPct.toFixed(1) + '%', 'Attendance so far counting only classes you were present in (no Duty Leave or Medical Leave).')}</div>
                             ${generateStatItemHTML(`maxPercent_${subject.code}`, 'Attend All Classes %', stats.projectedMaxPercent.toFixed(1) + '%', 'Your final percentage if you attend ALL remaining classes.')}
                             ${generateStatItemHTML(`minPercent_${subject.code}`, 'Skip All Classes %', stats.projectedMinPercent.toFixed(1) + '%', 'Your final percentage if you SKIP all remaining classes.')}
                             ${stats.projectedMaxPercent >= (getMinAttendanceCriteria() * 100) ? generateStatItemHTML(`safeSkipPercent_${subject.code}`, 'After Safe Skips %', stats.safeSkipPercent.toFixed(1) + '%', 'Your final percentage after skipping the maximum number of classes while staying above the minimum requirement.') : ''}
@@ -12261,8 +12460,8 @@
                 <div class="subject-card" style="border-left-color: var(--primary-grad-start);">
                     <div class="subject-title">📈 Overall Attendance Summary</div>
                     <div class="stats-grid">
-                        ${generateStatItemHTML('overall_currentPercent', 'Current % (with OD/ML)', stats.currentPercent.toFixed(1) + '%', 'Overall attendance so far, counting Duty Leave and Medical Leave as attended.')}
-                        ${generateStatItemHTML('overall_withoutPercent', 'Without OD/ML %', attendanceSplit(overall.attended, overall.totalHeld, overall.odml).withoutPct.toFixed(1) + '%', 'Overall attendance counting only classes you were present in.')}
+                        <div class="odv-with" style="display:contents">${generateStatItemHTML('overall_currentPercent', 'Current %<span class="odv-both"> (with OD/ML)</span>', stats.currentPercent.toFixed(1) + '%', 'Overall attendance so far, counting Duty Leave and Medical Leave as attended.')}</div>
+                        <div class="odv-orig" style="display:contents">${generateStatItemHTML('overall_withoutPercent', 'Current % (original)', attendanceSplit(overall.attended, overall.totalHeld, overall.odml).withoutPct.toFixed(1) + '%', 'Overall attendance counting only classes you were present in.')}</div>
                         ${generateStatItemHTML('overall_maxPercent', 'Attend All Classes %', stats.projectedMaxPercent.toFixed(1) + '%', 'Your final overall percentage if you attend ALL remaining classes.')}
                         ${generateStatItemHTML('overall_minPercent', 'Skip All Classes %', stats.projectedMinPercent.toFixed(1) + '%', 'Your final overall percentage if you SKIP all remaining classes.')}
                         ${stats.projectedMaxPercent >= (getMinAttendanceCriteria() * 100) ? generateStatItemHTML('overall_safeSkipPercent', 'After Safe Skips %', stats.safeSkipPercent.toFixed(1) + '%', 'Your final percentage after skipping the maximum number of classes while staying above the minimum requirement.') : ''}
@@ -21438,6 +21637,7 @@ RULES:
 
                         classData = {
                             name: rawData.t,
+                            startDate: rawData.sd ? expandDate(rawData.sd) : '',
                             lastDate: expandDate(rawData.ld),
                             subjects: processedSubjects,
                             holidays: (rawData.h || []).map(expandDate)
@@ -21520,6 +21720,7 @@ RULES:
 
                         classData = {
                             name: className,
+                            startDate: data.portalSetup?.semesterStartDate || data.startDate || '',
                             lastDate: data.lastDate,
                             subjects: processedSubjects,
                             holidays: data.holidays || []
@@ -21529,6 +21730,7 @@ RULES:
                     else if (rawData.n && rawData.s) {
                         classData = {
                             name: rawData.n,
+                            startDate: rawData.sd || '',
                             lastDate: rawData.l,
                             subjects: rawData.s.map(sub => ({
                                 name: sub.n,
@@ -21609,10 +21811,13 @@ RULES:
                     classData.name = newName;
 
                     // Add to classes
+                    // Keep the semester start so period-wise attendance starts from it, not today
+                    const importedStart = classData.startDate || classData.portalSetup?.semesterStartDate || classData.sd || '';
                     classes[newName] = {
                         lastDate: classData.lastDate || '',
                         subjects: classData.subjects,
-                        holidays: classData.holidays || []
+                        holidays: classData.holidays || [],
+                        ...(importedStart ? { portalSetup: { ...(classData.portalSetup || {}), semesterStartDate: importedStart } } : {})
                     };
                     saveToStorage();
 
@@ -21673,7 +21878,7 @@ RULES:
             }
 
             // Builds the compact class payload read by the in-app QR scanner
-            // t=title, ld=lastDate(YYMMDD), h=holidays, s=subjects (n, sn, c, sch "1|1,2|0|...")
+            // t=title, sd=semesterStartDate(YYMMDD), ld=lastDate(YYMMDD), h=holidays, s=subjects (n, sn, c, sch "1|1,2|0|...")
             function buildClassQRPayload(className) {
                 const classData = classes[className];
                 if (!classData) return null;
@@ -21682,6 +21887,7 @@ RULES:
 
                 return JSON.stringify({
                     t: className,
+                    sd: compressDate(classData.portalSetup?.semesterStartDate || classData.startDate),
                     ld: compressDate(classData.lastDate),
                     h: (classData.holidays || []).map(compressDate),
                     s: classData.subjects.map((subject) => {
@@ -27088,16 +27294,16 @@ Answer helpfully using this context.`;
                     });
                 </script>
                 <!-- Attendance Management System -->
-                <script src="js/attendance-management.js?v=14"></script>
-                <script src="js/smart-search.js?v=21"></script>
+                <script src="js/attendance-management.js?v=15"></script>
+                <script src="js/smart-search.js?v=25"></script>
                 <script src="js/timetable-modes.js?v=6"></script>
-                <script src="js/profile-page.js?v=8"></script>
-                <script src="js/subjects-page.js?v=6"></script>
+                <script src="js/profile-page.js?v=9"></script>
+                <script src="js/subjects-page.js?v=7"></script>
                 <script src="js/day-check.js?v=2"></script>
                 <script src="js/notification-center.js?v=5"></script>
                 <script src="js/profile-tools.js?v=4"></script>
                 <script src="js/attendance-calendar.js?v=3"></script>
-                <script src="js/onboarding.js?v=1"></script>
+                <script src="js/onboarding.js?v=2"></script>
                 <!-- Toast Container -->
                 <div id="toast-container"></div>
 

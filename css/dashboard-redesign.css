@@ -1220,3 +1220,24 @@ body.dark-mode .dash-badge.extremely-safe {
         overflow-x: hidden;
     }
 }
+
+/* ---- Original / With OD/ML switch: one figure shows at a time ---- */
+.dash-hero-rings {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.dash-srow-metrics {
+    grid-template-columns: 1fr 1.1fr;
+}
+
+@media (max-width: 760px) {
+    .dash-srow-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .dash-metric-plan {
+        grid-column: auto;
+    }
+}
