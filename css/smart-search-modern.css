@@ -680,12 +680,6 @@ body.dark-mode #smartSearchPage {
         padding: 16px 14px 12px;
     }
 
-    #smartSearchPage .si-subject-table {
-        display: block;
-        overflow-x: auto;
-        white-space: nowrap;
-    }
-
     #smartSearchPage .si-composer {
         margin-bottom: 10px;
         border-radius: 20px;

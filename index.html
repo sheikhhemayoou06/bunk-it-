@@ -6372,13 +6372,15 @@
     <link rel="stylesheet" href="css/dashboard-redesign.css?v=10">
     <link rel="stylesheet" href="css/attendance-management.css?v=6">
     <link rel="stylesheet" href="css/smart-search.css?v=7">
-    <link rel="stylesheet" href="css/smart-search-modern.css?v=3">
+    <link rel="stylesheet" href="css/smart-search-modern.css?v=4">
     <link rel="stylesheet" href="css/timetable-modes.css?v=6">
     <link rel="stylesheet" href="css/profile-page.css?v=7">
     <link rel="stylesheet" href="css/subjects-page.css?v=4">
     <link rel="stylesheet" href="css/day-check.css?v=8">
     <link rel="stylesheet" href="css/onboarding.css?v=1">
-    <link rel="stylesheet" href="css/mobile-polish.css?v=2">
+    <link rel="stylesheet" href="css/scan-results.css?v=1">
+    <link rel="stylesheet" href="css/notifications-ig.css?v=1">
+    <link rel="stylesheet" href="css/mobile-polish.css?v=4">
 </head>
 
 <body>
@@ -11625,9 +11627,13 @@
                 const loadingSection = document.getElementById('loadingSection');
                 document.getElementById('resultsSection').innerHTML = '';
 
+                // Modern full-screen waiting animation (old preview + spinner only as fallback)
+                const modernScan = !!window.ScanResults;
+                if (modernScan) ScanResults.loading(filesArray);
+
                 // Clear and populate preview grid with all images
                 previewGrid.innerHTML = '';
-                previewSection.style.display = 'block';
+                previewSection.style.display = modernScan ? 'none' : 'block';
 
                 filesArray.forEach((file, index) => {
                     const reader = new FileReader();
@@ -11650,7 +11656,7 @@
                     reader.readAsDataURL(file);
                 });
 
-                loadingSection.style.display = 'block';
+                loadingSection.style.display = modernScan ? 'none' : 'block';
 
                 try {
                     let mergedData = {};
@@ -11686,7 +11692,8 @@
                     }
                 } catch (err) {
                     console.error('❌ Processing Error:', err);
-                    alert(`Failed to process images: ${err.message}`);
+                    if (modernScan) ScanResults.error(err.message);
+                    else alert(`Failed to process images: ${err.message}`);
                     loadingSection.style.display = 'none';
                     document.getElementById('resultsSection').innerHTML = `<div class="error-state"><i class="fas fa-exclamation-triangle"></i><p>${err.message}</p></div>`;
                 } finally {
@@ -11764,6 +11771,8 @@
             function showResultsTableOnly() {
                 const section = document.getElementById('resultsSection');
                 if (!section || !currentAnalysisData.length) return;
+                // Modern "Attendance Analysis & Projections" view — nothing else on screen
+                if (window.ScanResults) ScanResults.show();
                 const min = getMinAttendanceCriteria() * 100;
                 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
                 const dateLabel = (() => {
@@ -11829,7 +11838,7 @@
                         <button class="sr-more" onclick="showFullAnalysis()">Show full analysis</button>
                     </div>`;
                 resultsExtraSections().forEach(el => { el.dataset.srHidden = '1'; el.style.display = 'none'; });
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (!window.ScanResults) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
 
             // No class yet: read the screenshot anyway, show the table, and offer to create the class
@@ -11842,8 +11851,9 @@
                     document.body.appendChild(modal);
                 }
                 const frame = (inner) => `<div class="modal-content sr-modal"><button class="modal-close" onclick="closeModal('ssPreviewModal')">&times;</button>${inner}</div>`;
-                modal.innerHTML = frame(`<div class="sr-loading"><div class="sr-spinner"></div><p>Reading your screenshot…</p></div>`);
+                modal.innerHTML = frame(window.ScanResults ? `<div class="sv-screen-inline">${ScanResults.loaderHTML(files)}</div>` : `<div class="sr-loading"><div class="sr-spinner"></div><p>Reading your screenshot…</p></div>`);
                 openModal('ssPreviewModal');
+                if (window.ScanResults) ScanResults.animateLoader(modal);
 
                 const merged = {};
                 for (const file of files) {
@@ -27358,13 +27368,14 @@ Answer helpfully using this context.`;
                     });
                 </script>
                 <!-- Attendance Management System -->
-                <script src="js/attendance-management.js?v=15"></script>
-                <script src="js/smart-search.js?v=25"></script>
+                <script src="js/attendance-management.js?v=17"></script>
+                <script src="js/smart-search.js?v=26"></script>
                 <script src="js/timetable-modes.js?v=6"></script>
                 <script src="js/profile-page.js?v=9"></script>
+                <script src="js/scan-results.js?v=2"></script>
                 <script src="js/subjects-page.js?v=7"></script>
                 <script src="js/day-check.js?v=2"></script>
-                <script src="js/notification-center.js?v=5"></script>
+                <script src="js/notification-center.js?v=6"></script>
                 <script src="js/profile-tools.js?v=4"></script>
                 <script src="js/attendance-calendar.js?v=3"></script>
                 <script src="js/onboarding.js?v=2"></script>

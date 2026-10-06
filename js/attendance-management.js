@@ -861,7 +861,9 @@
             // Scroll anchor: today, or the next class day if today has no classes
             const rowId = (!anchorSet && dateStr >= today) ? (anchorSet = true, ' id="pgRowToday"') : '';
             const exam = typeof getExamOn === 'function' ? getExamOn(dateStr) : null;
-            let rowHtml = `<tr class="${rowClass}${exam ? ' pg-row-exam' : ''}"${rowId} data-date="${dateStr}"><td class="pg-date-cell" style="white-space:nowrap;font-weight:600;cursor:pointer;" onclick="window.amsOpenBulkDatePopup(event, '${dateStr}')" title="${exam ? `Exam: ${String(exam.title).replace(/"/g, '&quot;')} · ` : ''}Click for bulk actions on ${dispDate}">${dispDate}${exam ? ' <span class="pg-exam-tag">📝 Exam</span>' : ''}</td>`;
+            const dayPart = getDayShort(dateStr);
+            const datePart = parseDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+            let rowHtml = `<tr class="${rowClass}${exam ? ' pg-row-exam' : ''}"${rowId} data-date="${dateStr}"><td class="pg-date-cell" style="white-space:nowrap;font-weight:600;cursor:pointer;" onclick="window.amsOpenBulkDatePopup(event, '${dateStr}')" title="${exam ? `Exam: ${String(exam.title).replace(/"/g, '&quot;')} · ` : ''}Click for bulk actions on ${dispDate}"><span class="pg-dw">${dayPart}</span> <span class="pg-dd">${datePart}</span>${exam ? ' <span class="pg-exam-tag">📝 Exam</span>' : ''}</td>`;
             
             const periodCounts = {};
             for(let i=0; i<maxPeriods; i++) {
@@ -882,7 +884,7 @@
                     // Subject color glow (like portal mode)
                     const subjIdx = sc.subjects.findIndex(s => s.code === p.code);
                     const subjColor = getSubjectColor(subjIdx >= 0 ? subjIdx : 0);
-                    const glowStyle = `box-shadow: 0 0 8px 2px ${subjColor}40, inset 0 0 0 2px ${subjColor};`;
+                    const glowStyle = `--sc:${subjColor}; box-shadow: 0 0 8px 2px ${subjColor}40, inset 0 0 0 2px ${subjColor};`;
                     const safeName = p.name.replace(/'/g, "\\'");
                     // Short subject label so each cell says which class it is (e.g. "FLA")
                     const abbr = cellLabel(p);
@@ -998,6 +1000,64 @@
                 .pg-legend { gap: 8px 12px; font-size: 0.78rem; padding: 8px 10px; }
                 .pg-range-info { font-size: 0.78rem; }
             }
+            /* ---------- Phones: whole day fits, clean cells, compact controls ---------- */
+            @media (max-width: 560px) {
+                #studentPortalPage .ams-container { padding: 0 12px; }
+                .ams-mark-section { margin-top: 12px !important; }
+                .period-grid-container { gap: 12px; margin-top: 12px; }
+                .pg-range-info { margin: -2px 0 10px; line-height: 1.45; }
+
+                /* Legend: one tidy row */
+                .pg-legend { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; gap: 6px; padding: 6px; margin-bottom: 10px; border-radius: 12px; scrollbar-width: none; }
+                .pg-legend::-webkit-scrollbar { display: none; }
+                .pg-leg-item { flex: 0 0 auto; gap: 5px; padding: 4px 9px; border-radius: 999px; background: var(--card-bg); border: 1px solid var(--border-color); font-size: 0.72rem; white-space: nowrap; }
+                .pg-leg-box { width: 10px !important; height: 10px !important; border-radius: 3px; border-width: 1.5px !important; }
+
+                /* Bulk actions: small chips instead of big coloured blocks */
+                .pg-bulk-actions { display: flex !important; flex-wrap: wrap; gap: 6px !important; padding: 12px !important; border-radius: 16px; }
+                .pg-bulk-actions .pg-bulk-title { flex-basis: 100%; margin: 0 0 2px !important; font-size: 0.72rem !important; letter-spacing: 0.5px; text-transform: uppercase; }
+                .pg-bulk-actions .pg-bulk-divider { flex-basis: 100%; margin: 6px 0 2px; padding-top: 8px; font-size: 0.72rem; }
+                .pg-bulk-actions button { flex: 0 0 auto; width: auto; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px !important; border-radius: 999px; font-size: 0.78rem !important; font-weight: 600; color: var(--dark-text) !important; background: var(--light-bg) !important; border: 1px solid var(--border-color) !important; }
+                .pg-bulk-actions button::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+                .pg-bulk-actions .pg-btn-present::before { background: #22c55e; }
+                .pg-bulk-actions .pg-btn-absent::before { background: #ef4444; }
+                .pg-bulk-actions .pg-btn-cancelled::before { background: #9ca3af; }
+                .pg-bulk-actions .pg-btn-duty::before { background: #3b82f6; }
+                .pg-bulk-actions .pg-btn-medical::before { background: #f59e0b; }
+                .pg-bulk-actions .pg-btn-reset::before { background: transparent; border: 1.5px solid var(--medium-text); box-sizing: border-box; }
+                .pg-bulk-actions .pg-btn-shift::before { background: #7c3aed; }
+                .pg-bulk-actions .pg-btn-holiday::before { background: #0d9488; }
+
+                /* Grid: no sideways scroll for a normal day (up to 7 periods) */
+                .pg-table-wrapper { border-radius: 16px; max-height: 70vh; }
+                .pg-table { min-width: ${maxPeriods > 7 ? 56 + maxPeriods * 42 : 0}px !important; width: 100%; table-layout: fixed; border-spacing: 3px; }
+                .pg-table th { padding: 8px 0 !important; font-size: 0.72rem; border-bottom-width: 1px; }
+                .pg-table th:first-child, .pg-table td.pg-date-cell { width: 52px; }
+                .pg-table td { padding: 0 !important; }
+                .pg-table td.pg-date-cell { padding: 5px 2px !important; white-space: normal !important; line-height: 1.15; border-radius: 10px; }
+                .pg-dw { display: block; font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.7; }
+                .pg-dd { display: block; font-size: 0.78rem; font-weight: 700; }
+                .pg-exam-tag { display: block; font-size: 0.55rem; }
+                .pg-cell { min-width: 0 !important; height: 42px; border-radius: 10px; border: none !important; box-shadow: inset 0 0 0 1.5px var(--sc, transparent) !important; }
+                .pg-cell:hover { transform: none; }
+                .pg-cell:active { transform: scale(0.94); }
+                .pg-cell .pg-sub { font-size: 0.54rem; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+                .pg-cell .pg-st { font-size: 0.8rem; margin-top: 1px; }
+                .pg-present, .pg-absent, .pg-cancelled, .pg-duty, .pg-medical { box-shadow: none !important; }
+                .pg-null { background: color-mix(in srgb, var(--sc, #94a3b8) 9%, var(--card-bg, #fff)) !important; color: var(--dark-text); }
+                .pg-empty { height: 42px; border-radius: 10px; background: transparent !important; color: var(--border-color); font-size: 0.8rem; }
+                .pg-row-today td.pg-date-cell { box-shadow: 0 4px 12px -4px rgba(79, 70, 229, 0.55); }
+                .pg-row-future .pg-cell:not(.pg-empty) { opacity: 0.45; }
+
+                /* Tap pop-ups: bottom sheet, thumb-friendly */
+                .pg-edit-popup, .pg-bulk-date-popup { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: auto !important; min-width: 0; border-radius: 20px 20px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); animation: pgSheetUp 0.22s cubic-bezier(.2,.8,.2,1); box-shadow: 0 -12px 40px rgba(0,0,0,0.25); }
+                .pg-edit-popup, .pg-bulk-date-popup { box-shadow: 0 0 0 100vmax rgba(15, 23, 42, 0.45), 0 -12px 40px rgba(0,0,0,0.25) !important; }
+                .pg-edit-popup .pg-popup-header, .pg-bulk-date-popup .pg-popup-header { font-size: 0.98rem; padding-bottom: 10px; margin-bottom: 10px; }
+                .pg-edit-popup .pg-popup-header::before, .pg-bulk-date-popup .pg-popup-header::before { content: ''; display: block; width: 40px; height: 4px; margin: -4px auto 12px; border-radius: 999px; background: var(--border-color); }
+                .pg-edit-popup button, .pg-bulk-date-popup button { padding: 12px 14px; font-size: 0.92rem; border-radius: 12px; }
+                .pg-edit-popup button:hover, .pg-bulk-date-popup button:hover { transform: none; }
+                @keyframes pgSheetUp { from { transform: translateY(100%); } to { transform: none; } }
+            }
         </style>
         
         <div class="ams-mark-section" style="margin-top: 24px;">
@@ -1030,7 +1090,7 @@
             
             <div class="period-grid-container">
                 <div class="pg-bulk-actions">
-                    <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; color: var(--medium-text);">Bulk Actions (Up to Today)</div>
+                    <div class="pg-bulk-title" style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; color: var(--medium-text);">Bulk Actions (Up to Today)</div>
                     <button class="pg-btn-present" onclick="window.amsBulkPeriod('Attended')">✓ All Attended</button>
                     <button class="pg-btn-absent" onclick="window.amsBulkPeriod('Skipped')">✗ All Skipped</button>
                     <button class="pg-btn-cancelled" onclick="window.amsBulkPeriod('Cancelled')">× All Cancelled</button>
@@ -1775,7 +1835,7 @@ function renderFilterSection(sc) {
         popup.innerHTML = `
             <div class="pg-popup-header">
                 ${subjectName}
-                <small>${dateStr}</small>
+                <small>${formatDateDisplay(dateStr)} · ${getDayName(dateStr)}</small>
             </div>
             <button style="background: #4CAF50; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Attended')">✓ Attended</button>
             <button style="background: #f44336; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Skipped')">✗ Skipped</button>
@@ -1876,7 +1936,7 @@ function renderFilterSection(sc) {
         popup.innerHTML = `
             <div class="pg-popup-header">
                 Bulk Actions (All Periods)
-                <small>${dateStr}</small>
+                <small>${formatDateDisplay(dateStr)} · ${getDayName(dateStr)}</small>
             </div>
             <button style="background: #4CAF50; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Attended')">✓ All Attended</button>
             <button style="background: #f44336; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Skipped')">✗ All Skipped</button>

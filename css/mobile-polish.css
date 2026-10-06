@@ -267,21 +267,6 @@
         word-break: break-word;
     }
 
-    #smartSearchPage .si-subject-table td:first-child,
-    #smartSearchPage .si-subject-table th:first-child {
-        white-space: normal;
-        min-width: 112px;
-        position: sticky;
-        left: 0;
-        background: var(--si-surface);
-        z-index: 1;
-    }
-
-    #smartSearchPage .si-subject-table td,
-    #smartSearchPage .si-subject-table th {
-        padding: 9px 8px;
-    }
-
     #smartSearchPage .si-answer-title {
         font-size: 0.98rem;
     }
@@ -304,6 +289,90 @@
         margin-left: 0;
         margin-right: 0;
     }
+}
+
+/* ---------- Smart Search tables become cards on phones ---------- */
+@media (max-width: 600px) {
+    #smartSearchPage .si-subject-table,
+    #smartSearchPage .si-subject-table tbody,
+    #smartSearchPage .si-subject-table tfoot {
+        display: block;
+        width: 100%;
+        border: none;
+        background: transparent;
+        overflow: visible;
+        border-radius: 0;
+    }
+
+    #smartSearchPage .si-subject-table thead {
+        display: none;
+    }
+
+    #smartSearchPage .si-subject-table tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 12px;
+        margin: 0 0 10px;
+        padding: 12px 14px;
+        border: 1px solid var(--si-border);
+        border-radius: 14px;
+        background: var(--si-surface);
+    }
+
+    #smartSearchPage .si-subject-table tfoot tr {
+        background: var(--si-bg);
+    }
+
+    #smartSearchPage .si-subject-table td {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        font-size: 0.92rem;
+        text-align: left !important;
+        white-space: normal;
+    }
+
+    #smartSearchPage .si-subject-table td:first-child {
+        grid-column: 1 / -1;
+        padding-bottom: 8px !important;
+        margin-bottom: 2px;
+        border-bottom: 1px solid var(--si-border) !important;
+        font-size: 0.98rem;
+    }
+
+    #smartSearchPage .si-subject-table td:first-child br {
+        display: none;
+    }
+
+    #smartSearchPage .si-subject-table td:first-child br + small,
+    #smartSearchPage .si-subject-table td:first-child small {
+        font-size: 0.75rem;
+    }
+
+    #smartSearchPage .si-td-label {
+        display: block !important;
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: var(--si-text-secondary);
+    }
+
+    #smartSearchPage .si-subject-table tbody tr:hover td {
+        background: transparent !important;
+    }
+
+    #smartSearchPage .si-subject-table .si-badge {
+        align-self: flex-start;
+    }
+}
+
+#smartSearchPage .si-td-label {
+    display: none;
 }
 
 @media (max-width: 380px) {

@@ -17,7 +17,6 @@
 
     const LOG_KEY = 'bunkit_notification_log';
     const SEEN_KEY = 'bunkit_notifications_seen';
-    const MISSED_LIMIT = 10;
 
     function esc(str) {
         return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -248,10 +247,25 @@
         });
     }
 
+    // ---------- dismissed (deleted) items ----------
+    // History entries are removed from the log; missed days and tips are derived,
+    // so deleting them stores their id here and they stay hidden.
+    const DISMISS_KEY = 'bunkit_notifications_dismissed';
+    function dismissed() {
+        try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')); } catch (e) { return new Set(); }
+    }
+    function saveDismissed(set) {
+        localStorage.setItem(DISMISS_KEY, JSON.stringify([...set].slice(-400)));
+    }
+    const missedId = (m) => `m:${className()}:${m.date}`;
+    const tipId = (t) => `a:${className()}:${t.title}`;
+    const histId = (h) => `h:${h.at}|${h.title}`;
+
     // ---------- badge ----------
     function badgeCount() {
-        const missed = missedDays().length;
-        const danger = advice().filter(a => a.level === 'danger').length;
+        const gone = dismissed();
+        const missed = missedDays().filter(m => !gone.has(missedId(m))).length;
+        const danger = advice().filter(a => a.level === 'danger' && !gone.has(tipId(a))).length;
         const lastSeen = localStorage.getItem(SEEN_KEY) || '';
         const fresh = readLog().filter(e => e.at > lastSeen).length;
         return missed + danger + fresh;
@@ -271,62 +285,209 @@
         }, 200);
     }
 
-    // ---------- panel ----------
-    let showAllMissed = false;
+    // ---------- panel (Instagram-style) ----------
+    let filter = 'all';
+    let selecting = false;
+    let selected = new Set();
+    let lastSeenAtOpen = '';
+    let undoBatch = null;
+    let undoTimer = null;
+
+    // "3m", "5h", "2d", "3w"
+    function shortAgo(iso) {
+        const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+        if (mins < 1) return 'now';
+        if (mins < 60) return `${mins}m`;
+        const hrs = Math.round(mins / 60);
+        if (hrs < 24) return `${hrs}h`;
+        const days = Math.round(hrs / 24);
+        if (days < 7) return `${days}d`;
+        return `${Math.round(days / 7)}w`;
+    }
+
+    const TONE = { danger: 'red', warning: 'amber', info: 'blue', safe: 'green' };
+
+    // One list of every item, each with an id, kind, time and group
+    function collect() {
+        const gone = dismissed();
+        const name = className();
+        const items = [];
+        if (name) {
+            advice().forEach(t => {
+                const id = tipId(t);
+                if (gone.has(id)) return;
+                items.push({ id, kind: 'tip', group: 'foryou', at: new Date().toISOString(), tone: TONE[t.level] || 'blue',
+                    icon: `<i class="fa-solid ${t.icon}"></i>`, title: t.title, body: t.body, unread: t.level === 'danger' });
+            });
+            missedDays().forEach(m => {
+                const id = missedId(m);
+                if (gone.has(id)) return;
+                const at = `${m.date}T${reminderTime()}:00`;
+                items.push({ id, kind: 'missed', date: m.date, at: new Date(at).toISOString(), tone: 'violet',
+                    icon: '<i class="fa-regular fa-calendar-xmark"></i>', title: `${fmt(m.date)} isn't marked`,
+                    body: `${m.classes} class${m.classes !== 1 ? 'es' : ''} waiting for attendance.`, unread: true });
+            });
+        }
+        readLog().forEach(h => {
+            items.push({ id: histId(h), kind: 'hist', at: h.at, tone: 'slate', icon: esc(h.icon || '🔔'), emoji: true,
+                title: h.title, body: h.body || '', unread: h.at > lastSeenAtOpen, raw: h });
+        });
+        return items;
+    }
+
+    function reminderTime() {
+        const name = className();
+        try { return (JSON.parse(localStorage.getItem(`notificationSettings_${name}`) || 'null') || {}).time || '16:30'; } catch (e) { return '16:30'; }
+    }
+
+    function groupOf(it) {
+        if (it.group === 'foryou') return 'foryou';
+        if (it.kind === 'hist' && it.unread) return 'new';
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const d = new Date(it.at);
+        const days = (t - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000;
+        if (days <= 0) return 'today';
+        if (days < 7) return 'week';
+        return 'earlier';
+    }
+    const GROUPS = [['foryou', 'For you'], ['new', 'New'], ['today', 'Today'], ['week', 'This week'], ['earlier', 'Earlier']];
+
+    function rowHTML(it) {
+        const action = it.kind === 'missed' && !selecting ? `
+            <div class="ign-actions">
+                <button class="ign-btn ign-btn-primary" onclick="event.stopPropagation(); NotificationCenter.mark('${it.date}', 'Attended')">Present</button>
+                <button class="ign-btn" onclick="event.stopPropagation(); NotificationCenter.mark('${it.date}', 'Skipped')" aria-label="Mark absent">Absent</button>
+            </div>` : '';
+        const onRow = selecting ? `NotificationCenter.selectEl(this)`
+            : it.kind === 'missed' ? `NotificationCenter.manual('${it.date}')` : '';
+        return `
+            <div class="ign-row-wrap" data-id="${esc(it.id)}">
+                <div class="ign-swipe-bg"><i class="fa-regular fa-trash-can"></i> Delete</div>
+                <div class="ign-row ${it.unread ? 'unread' : ''} ${selected.has(it.id) ? 'picked' : ''}" ${onRow ? `onclick="${onRow}"` : ''}>
+                    ${selecting ? `<span class="ign-check"><i class="fa-solid fa-check"></i></span>` : ''}
+                    <span class="ign-avatar ign-${it.tone} ${it.unread ? 'ring' : ''}">${it.icon}</span>
+                    <div class="ign-text">
+                        <p><strong>${esc(it.title)}</strong>${it.body ? ` ${esc(it.body)}` : ''} <time>${it.group === 'foryou' ? '' : shortAgo(it.at)}</time></p>
+                        ${action}
+                    </div>
+                    ${!selecting ? `<button class="ign-del" onclick="event.stopPropagation(); NotificationCenter.removeEl(this)" aria-label="Delete notification"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+                    ${it.unread && !selecting ? '<span class="ign-dot"></span>' : ''}
+                </div>
+            </div>`;
+    }
 
     function render() {
         const panel = document.getElementById('notifCenter');
         if (!panel) return;
-        const name = className();
-        const missed = name ? missedDays() : [];
-        const tips = name ? advice() : [];
-        const history = readLog();
-        const visible = showAllMissed ? missed : missed.slice(0, MISSED_LIMIT);
+        const all = collect();
+        const shown = all.filter(it => filter === 'all' || (filter === 'missed' && it.kind === 'missed') ||
+            (filter === 'tips' && it.kind === 'tip') || (filter === 'activity' && it.kind === 'hist'));
+        const counts = { all: all.length, missed: all.filter(i => i.kind === 'missed').length, tips: all.filter(i => i.kind === 'tip').length, activity: all.filter(i => i.kind === 'hist').length };
 
-        const missedHtml = missed.length ? `
-            <div class="nc-list">
-                ${visible.map(m => `
-                    <div class="nc-missed">
-                        <div class="nc-missed-date">
-                            <strong>${fmt(m.date)}</strong>
-                            <span>${m.classes} class${m.classes !== 1 ? 'es' : ''} · not marked</span>
-                        </div>
-                        <div class="nc-missed-actions">
-                            <button class="nc-mini present" onclick="NotificationCenter.mark('${m.date}', 'Attended')" title="All present" aria-label="Mark all present on ${fmt(m.date)}">✅</button>
-                            <button class="nc-mini absent" onclick="NotificationCenter.mark('${m.date}', 'Skipped')" title="All absent" aria-label="Mark all absent on ${fmt(m.date)}">❌</button>
-                            <button class="nc-mini" onclick="NotificationCenter.manual('${m.date}')" title="Mark manually" aria-label="Mark ${fmt(m.date)} manually">✏️</button>
-                        </div>
-                    </div>`).join('')}
-            </div>
-            ${missed.length > MISSED_LIMIT ? `<button class="nc-more" onclick="NotificationCenter.toggleAll()">${showAllMissed ? 'Show fewer' : `Show all ${missed.length} missed days`}</button>` : ''}`
-            : `<div class="nc-empty"><i class="fa-solid fa-circle-check"></i> Every class day is marked.</div>`;
+        panel.querySelector('.ign-head-action').innerHTML = all.length
+            ? `<button class="ign-link" onclick="NotificationCenter.toggleSelecting()">${selecting ? 'Done' : 'Edit'}</button>` : '';
+        panel.querySelector('.ign-chips').innerHTML = [['all', 'All'], ['missed', 'Missed days'], ['tips', 'For you'], ['activity', 'Activity']]
+            .map(([k, l]) => `<button class="ign-chip ${filter === k ? 'on' : ''}" onclick="NotificationCenter.setFilter('${k}')">${l}${counts[k] ? ` <span>${counts[k]}</span>` : ''}</button>`).join('');
 
-        const adviceHtml = tips.length ? tips.map(a => `
-            <div class="nc-tip ${a.level}">
-                <span class="nc-tip-icon"><i class="fa-solid ${a.icon}"></i></span>
-                <div><strong>${esc(a.title)}</strong><p>${esc(a.body)}</p></div>
-            </div>`).join('') : `<div class="nc-empty">Advice appears once attendance is marked.</div>`;
+        let body = '';
+        if (!shown.length) {
+            body = `<div class="ign-empty">
+                <div class="ign-empty-icon"><i class="fa-regular fa-bell"></i></div>
+                <h3>${filter === 'all' ? "You're all caught up" : 'Nothing here'}</h3>
+                <p>${filter === 'missed' ? 'Every class day is marked.' : 'New reminders and tips will show up here.'}</p>
+            </div>`;
+        } else {
+            GROUPS.forEach(([key, label]) => {
+                const list = shown.filter(it => groupOf(it) === key).sort((a, b) => b.at.localeCompare(a.at));
+                if (!list.length) return;
+                body += `<section class="ign-group"><h3>${label}</h3>${list.map(rowHTML).join('')}</section>`;
+            });
+        }
+        panel.querySelector('.ign-list').innerHTML = body;
 
-        const historyHtml = history.length ? history.slice(0, 15).map(h => `
-            <div class="nc-hist">
-                <span class="nc-hist-icon">${esc(h.icon || '🔔')}</span>
-                <div><strong>${esc(h.title)}</strong>${h.body ? `<p>${esc(h.body)}</p>` : ''}</div>
-                <time>${timeAgo(h.at)}</time>
-            </div>`).join('') : `<div class="nc-empty">No notifications yet.</div>`;
+        const bar = panel.querySelector('.ign-select-bar');
+        bar.hidden = !selecting;
+        if (selecting) {
+            bar.innerHTML = `
+                <button class="ign-link" onclick="NotificationCenter.selectAll()">${selected.size === shown.length && shown.length ? 'Unselect all' : 'Select all'}</button>
+                <button class="ign-btn ign-btn-danger" ${selected.size ? '' : 'disabled'} onclick="NotificationCenter.remove([...NotificationCenter._selected()])">
+                    <i class="fa-regular fa-trash-can"></i> Delete${selected.size ? ` (${selected.size})` : ''}</button>`;
+        }
+        if (!selecting) attachSwipe(panel);
+        panel._shown = shown;
+    }
 
-        panel.querySelector('.nc-body').innerHTML = `
-            <section class="nc-section">
-                <h3><i class="fa-regular fa-calendar-xmark"></i> Missed days ${missed.length ? `<span class="nc-count">${missed.length}</span>` : ''}</h3>
-                ${missedHtml}
-            </section>
-            <section class="nc-section">
-                <h3><i class="fa-regular fa-lightbulb"></i> Advice</h3>
-                ${adviceHtml}
-            </section>
-            <section class="nc-section">
-                <h3><i class="fa-regular fa-bell"></i> Recent notifications</h3>
-                ${historyHtml}
-            </section>`;
+    // Swipe a row left to delete (phones)
+    function attachSwipe(panel) {
+        panel.querySelectorAll('.ign-row-wrap').forEach(wrap => {
+            const row = wrap.querySelector('.ign-row');
+            let x0 = null, y0 = 0, dx = 0, dragging = false;
+            row.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; dragging = false; row.style.transition = 'none'; }, { passive: true });
+            row.addEventListener('touchmove', e => {
+                if (x0 === null) return;
+                const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+                if (!dragging && Math.abs(my) > Math.abs(mx)) { x0 = null; return; }
+                if (Math.abs(mx) > 8) dragging = true;
+                dx = Math.min(0, mx);
+                row.style.transform = `translateX(${dx}px)`;
+                wrap.classList.toggle('swiping', dx < -10);
+            }, { passive: true });
+            row.addEventListener('touchend', () => {
+                if (x0 === null) return;
+                row.style.transition = '';
+                if (dx < -Math.min(110, wrap.offsetWidth * 0.32)) {
+                    row.style.transform = `translateX(-${wrap.offsetWidth}px)`;
+                    setTimeout(() => remove([wrap.dataset.id]), 180);
+                } else {
+                    row.style.transform = '';
+                    wrap.classList.remove('swiping');
+                }
+                if (dragging) { row.addEventListener('click', ev => ev.stopPropagation(), { capture: true, once: true }); }
+                x0 = null;
+            });
+        });
+    }
+
+    function remove(ids) {
+        if (!ids || !ids.length) return;
+        const idSet = new Set(ids);
+        const log = readLog();
+        const keptLog = log.filter(h => !idSet.has(histId(h)));
+        const removedLog = log.filter(h => idSet.has(histId(h)));
+        const gone = dismissed();
+        const newlyDismissed = ids.filter(id => !id.startsWith('h:') && !gone.has(id));
+        newlyDismissed.forEach(id => gone.add(id));
+        localStorage.setItem(LOG_KEY, JSON.stringify(keptLog));
+        saveDismissed(gone);
+        undoBatch = { removedLog, newlyDismissed };
+        ids.forEach(id => selected.delete(id));
+        if (selecting && !collect().length) selecting = false;
+        render();
+        refreshBadge();
+        showUndo(ids.length);
+    }
+
+    function showUndo(n) {
+        const panel = document.getElementById('notifCenter');
+        const bar = panel?.querySelector('.ign-snack');
+        if (!bar) return;
+        bar.innerHTML = `<span>${n === 1 ? 'Notification deleted' : `${n} notifications deleted`}</span><button onclick="NotificationCenter.undo()">Undo</button>`;
+        bar.classList.add('show');
+        clearTimeout(undoTimer);
+        undoTimer = setTimeout(() => { bar.classList.remove('show'); undoBatch = null; }, 5000);
+    }
+
+    function undo() {
+        if (!undoBatch) return;
+        const log = readLog().concat(undoBatch.removedLog).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+        localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0, 40)));
+        const gone = dismissed();
+        undoBatch.newlyDismissed.forEach(id => gone.delete(id));
+        saveDismissed(gone);
+        undoBatch = null;
+        document.querySelector('#notifCenter .ign-snack')?.classList.remove('show');
+        render();
+        refreshBadge();
     }
 
     async function open() {
@@ -334,28 +495,37 @@
         if (!panel) {
             panel = document.createElement('div');
             panel.id = 'notifCenter';
-            panel.className = 'nc-backdrop';
+            panel.className = 'ign-backdrop';
             panel.innerHTML = `
-                <aside class="nc-panel" role="dialog" aria-label="Notifications">
-                    <header class="nc-head">
+                <aside class="ign-panel" role="dialog" aria-label="Notifications">
+                    <header class="ign-head">
+                        <button class="ign-back" onclick="NotificationCenter.close()" aria-label="Close"><i class="fa-solid fa-arrow-left"></i></button>
                         <h2>Notifications</h2>
-                        <button class="nc-close" onclick="NotificationCenter.close()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                        <div class="ign-head-action"></div>
                     </header>
-                    <div class="nc-body"></div>
+                    <div class="ign-chips"></div>
+                    <div class="ign-list"></div>
+                    <div class="ign-select-bar" hidden></div>
+                    <div class="ign-snack" role="status"></div>
                 </aside>`;
             panel.addEventListener('click', (e) => { if (e.target === panel) close(); });
             document.body.appendChild(panel);
         }
         await mergeServiceWorkerLog();
-        showAllMissed = false;
+        lastSeenAtOpen = localStorage.getItem(SEEN_KEY) || '';
+        filter = 'all';
+        selecting = false;
+        selected = new Set();
         render();
         requestAnimationFrame(() => panel.classList.add('open'));
+        document.body.classList.add('ign-lock');
         localStorage.setItem(SEEN_KEY, new Date().toISOString());
         refreshBadge();
     }
 
     function close() {
         document.getElementById('notifCenter')?.classList.remove('open');
+        document.body.classList.remove('ign-lock');
     }
 
     function isOpen() {
@@ -393,7 +563,20 @@
             close();
             if (window.DayCheck) DayCheck.manual(dateStr);
         },
-        toggleAll() { showAllMissed = !showAllMissed; render(); },
+        toggleAll() { render(); },
+        remove, undo,
+        setFilter(f) { filter = f; selected = new Set(); render(); },
+        toggleSelecting() { selecting = !selecting; selected = new Set(); render(); },
+        toggleSelect(id) { if (selected.has(id)) selected.delete(id); else selected.add(id); render(); },
+        // ids come from the row's data-id (safe for titles with quotes)
+        selectEl(el) { const id = el.closest('.ign-row-wrap')?.dataset.id; if (id) NotificationCenter.toggleSelect(id); },
+        removeEl(el) { const id = el.closest('.ign-row-wrap')?.dataset.id; if (id) remove([id]); },
+        selectAll() {
+            const shown = document.getElementById('notifCenter')?._shown || [];
+            selected = selected.size === shown.length ? new Set() : new Set(shown.map(i => i.id));
+            render();
+        },
+        _selected: () => selected,
         _missedDays: missedDays,
         _advice: advice
     };

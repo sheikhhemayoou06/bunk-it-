@@ -2459,6 +2459,23 @@
             </div>`), 'si-msg-bot');
     }
 
+    // Each cell gets its column name, so phones can show rows as labelled cards
+    function labelTableCells(root) {
+        root.querySelectorAll('.si-subject-table').forEach(table => {
+            const heads = [...table.querySelectorAll('thead th')];
+            if (!heads.length) return;
+            table.querySelectorAll('tbody tr, tfoot tr').forEach(tr => {
+                [...tr.children].forEach((td, i) => {
+                    if (i === 0 || td.querySelector(':scope > .si-td-label') || !heads[i]) return;
+                    const label = document.createElement('span');
+                    label.className = 'si-td-label';
+                    label.innerHTML = heads[i].innerHTML;
+                    td.insertBefore(label, td.firstChild);
+                });
+            });
+        });
+    }
+
     function renderAnswer(result, target, query) {
         if (!result) { if (target) target.remove(); return; }
 
@@ -2485,6 +2502,7 @@
         if (window.OdmlView) OdmlView.refresh(getAttendanceData());
         let el = target;
         if (el) { el.innerHTML = html; } else { el = appendMessage(html, 'si-msg-bot'); }
+        labelTableCells(el);
         scrollThread(el);
 
         // Asked by voice: answer by voice too
