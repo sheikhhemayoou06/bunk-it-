@@ -34,7 +34,6 @@
             el.setAttribute('aria-label', 'Welcome to Bunkit');
             el.innerHTML = `
                 <div class="ob-bg" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-                <button class="ob-close" onclick="Onboarding.later()" aria-label="Set up later">Later</button>
                 <div class="ob-stage"></div>
                 <div class="ob-dots" aria-hidden="true"><span></span><span></span></div>
                 <input type="file" id="obShotInput" accept="image/*" multiple hidden>`;
@@ -132,12 +131,11 @@
                 <p>Pick the easiest way. You can change everything later.</p>
             </div>
             <div class="ob-options">
-                ${card('create', '✍️', 'indigo', 'Create my class', 'Add subjects and your weekly timetable')}
-                ${card('ai', '✨', 'violet', 'From my timetable photo', 'AI reads subjects and periods for you')}
+                ${card('create', '✍️', 'indigo', 'Set up my class', 'Add subjects, dates and your weekly timetable')}
                 ${card('qr', '📷', 'teal', "Scan a classmate's QR", 'Copy their class setup in seconds')}
-                ${card('shot', '📸', 'amber', 'From my attendance screenshot', 'Read your portal and build the class')}
+                ${card('link', '🔗', 'violet', 'Open a share link', 'Paste the class link a classmate sent you')}
+                ${card('example', '🧪', 'amber', 'Try an example class', 'Explore Bunkit with sample data first')}
             </div>
-            <button class="ob-link" onclick="Onboarding.pick('example')">Just exploring? Try an example class</button>
         `, 1);
     }
 
@@ -146,7 +144,8 @@
             : (typeof classes !== 'undefined' && Object.keys(classes).length > 0);
     }
 
-    // After a setup window closes without a class: remind (banner + toast)
+    // After a setup window closes without a class: back to the setup screen
+    // (new users can't reach the app until a class exists)
     let watchTimer = null;
     function watchSetupWindow() {
         clearInterval(watchTimer);
@@ -158,12 +157,73 @@
             if (open) { sawOpen = true; return; }
             if (!sawOpen && Date.now() - started < 3000) return; // window still opening
             clearInterval(watchTimer);
-            if (typeof renderClassReminder === 'function') renderClassReminder();
-            if (typeof showToast === 'function') showToast('No class yet', 'Your class isn\'t set up — tap "Set up class" on Home when you\'re ready.', { duration: 4500 });
+            if (typeof showToast === 'function') showToast('Almost there', 'Set up a class to start using Bunkit.', { duration: 3500 });
+            start({ step: 'class' });
         }, 700);
     }
 
+    // ---------- Step 2b: paste a share link ----------
+    function linkStep() {
+        show(`
+            <div class="ob-hero ob-hero-sm">
+                <div class="ob-emoji">🔗</div>
+                <h1>Open a share link</h1>
+                <p>Paste the class link (or code) your classmate shared. Their subjects, dates and timetable are copied to your app.</p>
+            </div>
+            <label class="ob-field">
+                <span>Class link</span>
+                <div class="ob-link-row">
+                    <input type="text" id="obLink" placeholder="https://…/?class=v2_…" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    ${navigator.clipboard?.readText ? '<button type="button" class="ob-paste" onclick="Onboarding.pasteLink()"><i class="fa-regular fa-clipboard"></i> Paste</button>' : ''}
+                </div>
+                <small class="ob-link-msg" id="obLinkMsg"></small>
+            </label>
+            <button class="ob-primary" onclick="Onboarding.openLink()">Import class <i class="fa-solid fa-arrow-right"></i></button>
+            <button class="ob-link" onclick="Onboarding.back()">← Other ways to set up</button>
+        `, 1);
+        setTimeout(() => {
+            const input = document.getElementById('obLink');
+            if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') openLink(); });
+        }, 300);
+    }
+
+    // Accepts a full link, a link without https, or just the "v2_…" code
+    function extractClassCode(text) {
+        const t = String(text || '').trim();
+        if (!t) return null;
+        const m = t.match(/[?&]class=([^&#\s]+)/);
+        if (m) { try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; } }
+        if (/^v2_[A-Za-z0-9+\-_$%]+$/.test(t)) return t;
+        return null;
+    }
+
+    function linkMsg(text) {
+        const el = document.getElementById('obLinkMsg');
+        if (el) el.textContent = text;
+        const input = document.getElementById('obLink');
+        if (input) { input.classList.add('ob-shake'); setTimeout(() => input.classList.remove('ob-shake'), 500); }
+    }
+
+    async function pasteLink() {
+        try {
+            const text = await navigator.clipboard.readText();
+            const input = document.getElementById('obLink');
+            if (input) input.value = text.trim();
+            if (!extractClassCode(text)) linkMsg("That doesn't look like a Bunkit class link.");
+        } catch (e) { linkMsg('Allow clipboard access, or long-press the box and paste.'); }
+    }
+
+    function openLink() {
+        const code = extractClassCode(document.getElementById('obLink')?.value);
+        if (!code) { linkMsg('Paste the full link your classmate sent (it contains "?class=").'); return; }
+        if (typeof importClassFromURL !== 'function') { linkMsg('Please reload the app and try again.'); return; }
+        finish();
+        setTimeout(watchSetupWindow, 400);
+        setTimeout(() => importClassFromURL(code), 250);
+    }
+
     function pick(action) {
+        if (action === 'link') { linkStep(); return; }
         if (action === 'shot') {
             document.getElementById('obShotInput')?.click();
             return;
@@ -211,17 +271,8 @@
         setTimeout(() => { if (!el.classList.contains('ob-open')) el.remove(); }, 450);
     }
 
-    function later() {
-        // Snooze for this visit only — it comes back next time while there's no class
-        try { sessionStorage.setItem('ob_snoozed', '1'); } catch (e) { /* ignore */ }
-        finish();
-        if (typeof renderClassReminder === 'function') renderClassReminder();
-        if (typeof showToast === 'function') showToast('Set up any time', 'We\'ll remind you until your class is set up. Tap "Set up class" on Home.', { duration: 4500 });
-    }
+    // No skipping: onboarding stays until a class is set up
+    function later() { if (!hasClass()) start({ step: 'class' }); else finish(); }
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && document.getElementById('onboarding')?.classList.contains('ob-open')) later();
-    });
-
-    window.Onboarding = { start, saveName, pick, later, finish };
+    window.Onboarding = { start, saveName, pick, later, finish, openLink, pasteLink, back: () => classStep() };
 })();

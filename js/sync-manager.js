@@ -367,6 +367,10 @@ const SyncManager = {
                         if (prefs.odmlCap) localStorage.setItem('calcSettings_odmlCap', prefs.odmlCap);
                         if (prefs.odmlRule) localStorage.setItem('calcSettings_odmlRule', prefs.odmlRule);
                         if (prefs.odmlAllowancePct) localStorage.setItem('calcSettings_odmlAllowancePct', prefs.odmlAllowancePct);
+                        if (prefs.odmlMaxOwn) localStorage.setItem('calcSettings_odmlMaxOwn', prefs.odmlMaxOwn);
+                        if (prefs.odmlRule3) localStorage.setItem('calcSettings_odmlRule3', prefs.odmlRule3);
+                        if (prefs.minMedical) localStorage.setItem('calcSettings_minMedical', prefs.minMedical);
+                        if (prefs.isOverall !== undefined && prefs.isOverall !== null) localStorage.setItem('calcSettings_isOverall', prefs.isOverall);
                     }
                 }
 
@@ -502,7 +506,7 @@ const SyncManager = {
                     notifications,
                     // FIXED: Use correct localStorage keys matching index.html
                     minAttendance: localStorage.getItem('calcSettings_minAttendance'),
-                    odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'),
+                    odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'), odmlMaxOwn: localStorage.getItem('calcSettings_odmlMaxOwn'), odmlRule3: localStorage.getItem('calcSettings_odmlRule3'),
                     minMedical: localStorage.getItem('calcSettings_minMedical'),
                     isOverall: localStorage.getItem('calcSettings_isOverall'),
                     personalGeminiKey: localStorage.getItem('personalGeminiKey'), // Encrypted if possible in future
@@ -669,7 +673,7 @@ const SyncManager = {
                             userProfileName,
                             notifications,
                             minAttendance: localStorage.getItem('calcSettings_minAttendance'),
-                            odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'),
+                            odmlCap: localStorage.getItem('calcSettings_odmlCap'), odmlRule: localStorage.getItem('calcSettings_odmlRule'), odmlAllowancePct: localStorage.getItem('calcSettings_odmlAllowancePct'), odmlMaxOwn: localStorage.getItem('calcSettings_odmlMaxOwn'), odmlRule3: localStorage.getItem('calcSettings_odmlRule3'),
                             minMedical: localStorage.getItem('calcSettings_minMedical'),
                             isOverall: localStorage.getItem('calcSettings_isOverall'),
                             personalGeminiKey: localStorage.getItem('personalGeminiKey'),

@@ -140,7 +140,7 @@
             if (!plan) return;
             const p = r.stats.allowancePlan;
             items.push({
-                level: !p.eligible || p.needWithoutMore > r.stats.remaining ? 'danger' : p.unused ? 'warning' : 'info',
+                level: p.belowBand || p.needWithoutMore > r.stats.remaining ? 'danger' : p.unused ? 'warning' : 'info',
                 icon: 'fa-briefcase-medical',
                 title: plan.title,
                 body: plan.lines.join(' ')

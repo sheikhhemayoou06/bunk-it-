@@ -24,6 +24,8 @@
         return last && typeof classes !== 'undefined' && classes[last] ? last : null;
     }
 
+    const cssEsc = (v) => (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/["\\\]\[]/g, '\\$&');
+
     function esc(t) {
         return String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
@@ -108,7 +110,7 @@
 
     function showCard(c) {
         const host = cardHost();
-        if (host.querySelector(`[data-key="${CSS.escape(c.key)}"]`)) return;
+        if (host.querySelector(`[data-key="${cssEsc(c.key)}"]`)) return;
         const card = document.createElement('div');
         card.className = 'crm-card';
         card.dataset.key = c.key;
@@ -131,7 +133,7 @@
     }
 
     function closeCard(key) {
-        const card = document.querySelector(`#classReminderStack [data-key="${CSS.escape(key)}"]`);
+        const card = document.querySelector(`#classReminderStack [data-key="${cssEsc(key)}"]`);
         if (!card) return;
         card.classList.remove('show');
         setTimeout(() => card.remove(), 300);

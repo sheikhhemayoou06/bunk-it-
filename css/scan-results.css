@@ -645,3 +645,10 @@ body.dark-mode .sv-pill-danger { color: #f87171; }
 .sv-screen-inline .sv-loader {
     padding: 8px 4px 12px;
 }
+
+/* Three footer buttons (Scan again · Match my class · Done) */
+.sv-footer:has(> .sv-btn:nth-child(3)) { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 420px) {
+    .sv-footer:has(> .sv-btn:nth-child(3)) { grid-template-columns: 1fr 1fr; }
+    .sv-footer:has(> .sv-btn:nth-child(3)) > .sv-btn:last-child { grid-column: 1 / -1; }
+}

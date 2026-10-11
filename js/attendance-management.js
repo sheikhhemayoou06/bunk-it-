@@ -207,6 +207,7 @@
 
     // --- Calculate attendance stats from logs ---
     function calculateStats() {
+        normalizeLegacyLogs();
         const sc = getSelectedClass();
         if (!sc || !sc.subjects) return { subjects: [], overall: {} };
 
@@ -236,9 +237,11 @@
         sc.subjects.forEach(subj => {
             const base = baseline[subj.code];
             if (base) {
+                const baseOdml = Math.min(base.attended || 0, Number(base.odml) || 0);
                 subjectStats[subj.code].attended = base.attended || 0;
                 subjectStats[subj.code].totalHeld = base.total || 0;
-                subjectStats[subj.code].present = base.attended || 0;
+                subjectStats[subj.code].present = (base.attended || 0) - baseOdml;
+                subjectStats[subj.code].medical = baseOdml; // portal gives OD/ML as one number
                 subjectStats[subj.code].absent = (base.total || 0) - (base.attended || 0);
             }
         });
@@ -291,11 +294,11 @@
             totalDutyLeave += s.dutyLeave;
         });
 
-        // Overall % with the OD/ML limit applied per subject (as the college portal does)
-        const effective = subjectsArr.reduce((sum, sub) => sum + (typeof cappedWithPct === 'function'
-            ? (cappedWithPct(sub.attended, sub.totalHeld, sub.medical + sub.dutyLeave, remainingFor(sub.code)) / 100) * sub.totalHeld
-            : sub.attended), 0);
-        const percentage = totalHeld > 0 ? ((effective / totalHeld) * 100) : 0;
+        // Overall % = the OD/ML rule applied to the totals (as the college portal's Total row)
+        const totalRemaining = subjectsArr.reduce((n, sub) => n + remainingFor(sub.code), 0);
+        const percentage = typeof cappedWithPct === 'function'
+            ? cappedWithPct(totalAttended, totalHeld, totalMedical + totalDutyLeave, totalRemaining)
+            : (totalHeld > 0 ? (totalAttended / totalHeld) * 100 : 0);
         const min = minPct();
         const m = min / 100;
         const canMiss = percentage >= min ? Math.floor((totalAttended - m * totalHeld) / m) : 0;
@@ -712,13 +715,13 @@
 
         let rows = '';
         
-        let tMax = 0, tAtt = 0, tAbs = 0, tOdMl = 0, tEff = 0;
+        let tMax = 0, tAtt = 0, tAbs = 0, tOdMl = 0, tRem = 0;
         
         subjects.forEach(s => {
             const maxHours = s.totalHeld;
             const attHours = s.present; // Just present
             const odMlHours = s.medical + s.dutyLeave;
-            const absHours = s.absent;
+            const absHours = Math.max(0, maxHours - attHours); // like the portal: everything not present (OD/ML included)
             
             tMax += maxHours;
             tAtt += attHours;
@@ -731,7 +734,7 @@
             const totalPct = typeof cappedWithPct === 'function'
                 ? cappedWithPct(attHours + odMlHours, maxHours, odMlHours, remainingFor(s.code))
                 : (maxHours > 0 ? ((attHours + odMlHours) / maxHours) * 100 : 0);
-            tEff += (totalPct / 100) * maxHours;
+            tRem += remainingFor(s.code);
             
             const color = getPctColor(totalPct);
 
@@ -758,7 +761,9 @@
         // Total row
         const tAvgPct = tMax > 0 ? (tAtt / tMax) * 100 : 0;
         const tOdMlPct = tMax > 0 ? (tOdMl / tMax) * 100 : 0;
-        const tTotalPct = tMax > 0 ? (tEff / tMax) * 100 : 0;
+        const tTotalPct = typeof cappedWithPct === 'function'
+            ? cappedWithPct(tAtt + tOdMl, tMax, tOdMl, tRem)
+            : (tMax > 0 ? ((tAtt + tOdMl) / tMax) * 100 : 0);
         
         rows += `
         <tr style="background:var(--light-bg);font-weight:bold;border-top:2px solid var(--border-color);">
@@ -822,13 +827,17 @@
     }
     
     // "Formal Language and Automata" -> "FLA", "Computer Networks" -> "CN" (max 4 letters)
+    // Labels that read like a status (ML = Medical Leave, OD, P, A, C) are never used for a subject:
+    // "Machine Learning" -> "MACH", not "ML"
+    const STATUS_LABELS = new Set(['ML', 'OD', 'DL', 'P', 'A', 'C', 'NA']);
     function cellLabel(p) {
         const short = String(p.shortName || '').trim();
-        if (short && short.length <= 5 && short !== p.code) return short;
+        if (short && short.length <= 5 && short !== p.code && !STATUS_LABELS.has(short.toUpperCase())) return short;
         const ignore = ['and', 'of', 'the', 'in', 'for', 'to', 'a', 'an', '&'];
         const words = String(p.name || p.code).split(/\s+/).filter(w => w && !ignore.includes(w.toLowerCase()));
-        const acr = words.length > 1 ? words.map(w => w[0]).join('') : String(p.name || p.code).slice(0, 4);
-        return acr.toUpperCase().slice(0, 4);
+        const acr = (words.length > 1 ? words.map(w => w[0]).join('') : String(p.name || p.code).slice(0, 4)).toUpperCase().slice(0, 4);
+        if (!STATUS_LABELS.has(acr)) return acr;
+        return String(words[0] || p.code).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 4) || String(p.code).slice(0, 4);
     }
 
     function renderPeriodGridModal() {
@@ -1125,6 +1134,7 @@
 
     // Every counted mark, one entry per class hour, for the selected class only
     function cumulativeEntries() {
+        normalizeLegacyLogs();
         const sc = getSelectedClass();
         const logs = getLogs();
         const names = {};
@@ -1137,9 +1147,10 @@
                 const code = key.split('_p')[0];
                 if (!names[code]) return; // marks for subjects not in this class are not counted
                 const isLegacy = !key.includes('_p');
-                // Old whole-day marks (no period) stand for every class of that subject that day
-                const hours = isLegacy && typeof getClassCountOnDate === 'function'
-                    ? Math.max(1, getClassCountOnDate(dateStr, code)) : 1;
+                // Whole-day marks were split per class by normalizeLegacyLogs; one left over here is
+                // a subject with no class that day, so it isn't a class hour
+                if (isLegacy && typeof getClassCountOnDate === 'function' && getClassCountOnDate(dateStr, code) === 0) return;
+                const hours = 1;
                 entries.push({ date: dateStr, code, name: names[code], period: isLegacy ? null : Number(key.split('_p')[1]), bucket, hours, legacy: isLegacy });
             });
         });
@@ -1887,6 +1898,28 @@ function renderFilterSection(sc) {
         });
     }
 
+    // Old whole-day marks (e.g. a whole-day Medical Leave saved as "CODE") become one mark per
+    // class that day ("CODE_p1", "CODE_p2"), so every table counts class hours the same way
+    let normalizing = false;
+    function normalizeLegacyLogs() {
+        if (normalizing || !getSelectedClass()) return false;
+        normalizing = true;
+        try {
+            const logs = getLogs();
+            let changed = false;
+            Object.keys(logs).forEach(dateStr => {
+                const day = logs[dateStr];
+                if (!day || typeof day !== 'object' || !Object.keys(day).some(k => !k.includes('_p'))) return;
+                const before = JSON.stringify(day);
+                expandLegacyMarks(logs, dateStr);
+                if (JSON.stringify(day) !== before) changed = true;
+            });
+            if (changed) saveLogs(logs);
+            return changed;
+        } finally { normalizing = false; }
+    }
+    window.amsNormalizeLogs = normalizeLegacyLogs;
+
     window.amsUpdatePeriodStatus = function (dateStr, periodKey, status) {
         closePgPopup();
         
@@ -1978,11 +2011,15 @@ function renderFilterSection(sc) {
         expandLegacyMarks(logs, dateStr);
         
         const periodCounts = {};
+        const className = document.getElementById('classSelector')?.value;
+        let skipped = 0;
         periods.forEach(p => {
             periodCounts[p.code] = (periodCounts[p.code] || 0) + 1;
             const periodKey = `${p.code}_p${periodCounts[p.code]}`;
             if (targetStatus === 'Default') {
                 delete logs[dateStr][periodKey];
+            } else if (targetStatus !== 'Cancelled' && typeof isClassUpcoming === 'function' && isClassUpcoming(className, dateStr, periodKey)) {
+                skipped++; // hasn't ended yet
             } else {
                 logs[dateStr][periodKey] = targetStatus;
             }
@@ -1993,7 +2030,7 @@ function renderFilterSection(sc) {
         }
         
         saveLogs(logs);
-        showAmsToast(`✅ All periods on ${dateStr} updated`);
+        showAmsToast(skipped ? `✅ Updated · ${skipped} class${skipped !== 1 ? 'es' : ''} not over yet left unmarked` : `✅ All periods on ${dateStr} updated`);
         
         if (window.SyncManager) {
             try { window.SyncManager.uploadAll(); } catch (e) { /* ignore */ }
@@ -2032,11 +2069,13 @@ function renderFilterSection(sc) {
             if (!logs[dateStr]) logs[dateStr] = {};
             expandLegacyMarks(logs, dateStr);
             const periodCounts = {};
+            const className = document.getElementById('classSelector')?.value;
             periods.forEach(p => {
                 if (!p) return;
                 periodCounts[p.code] = (periodCounts[p.code] || 0) + 1;
                 const periodKey = `${p.code}_p${periodCounts[p.code]}`;
                 if (targetStatus === 'Default') delete logs[dateStr][periodKey];
+                else if (typeof isClassUpcoming === 'function' && isClassUpcoming(className, dateStr, periodKey)) return; // not over yet
                 else logs[dateStr][periodKey] = targetStatus;
             });
             if (Object.keys(logs[dateStr]).length === 0) delete logs[dateStr];

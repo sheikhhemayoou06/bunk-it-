@@ -97,12 +97,14 @@
         const logs = getLogs();
         const before = logs[dateStr] ? { ...logs[dateStr] } : null;
         const dayLog = logs[dateStr] = logs[dateStr] || {};
-        let applied = 0, kept = 0;
+        let applied = 0, kept = 0, upcoming = 0;
 
         keys.forEach(key => {
             const code = key.split('_p')[0];
             const existing = dayLog[key] || dayLog[code];
             if (existing && KEEP.has(existing)) { kept++; return; }
+            // Classes that haven't ended yet stay unmarked
+            if (!existing && typeof isClassUpcoming === 'function' && isClassUpcoming(className, dateStr, key)) { upcoming++; return; }
             dayLog[key] = status;
             applied++;
         });
@@ -131,7 +133,7 @@
         if (!quiet && typeof showToast === 'function') {
             const label = status === 'Attended' ? '✅ All present' : '❌ All absent';
             showToast(`${label} · ${fmt(dateStr)}`,
-                `${applied} class${applied !== 1 ? 'es' : ''} marked${kept ? `, ${kept} OD/ML/cancelled kept` : ''}. Attendance updated.`,
+                `${applied} class${applied !== 1 ? 'es' : ''} marked${kept ? `, ${kept} OD/ML/cancelled kept` : ''}${upcoming ? `, ${upcoming} not over yet left for later` : ''}. Attendance updated.`,
                 {
                     duration: 6000,
                     actionText: 'Undo',
@@ -144,7 +146,7 @@
                     }
                 });
         }
-        return { applied, kept };
+        return { applied, kept, upcoming };
     }
 
     // ---------- mirror the plan for the service worker ----------

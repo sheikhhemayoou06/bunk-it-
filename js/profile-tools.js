@@ -218,13 +218,13 @@
             const before = cappedWithPct(sub.attended, sub.totalHeld, sub.odml, sub.remaining);
             const after = attendanceSplit(sub.attended + d.att, sub.totalHeld + d.held, (Number(sub.odml) || 0) + d.odml, sub.remaining);
             let counts;
-            if (after.rule === 'allowance') {
-                counts = `${Math.min(after.odml, after.allowance)} of ${after.allowance} allowance hours`
+            if (after.allowance !== null) {
+                counts = `${Math.min(after.odml, after.allowance)} of ${after.allowance} allowed hours`
                     + (after.odmlUnused ? `<br><span class="pt-warn">${after.odmlUnused} over the ${after.limitLabel}, won't count</span>` : '')
-                    + (!after.eligible ? `<br><span class="pt-warn">Own attendance ${after.withoutPct.toFixed(1)}%, below ${after.ownMin}%</span>` : '');
+                    + (after.belowBand ? `<br><span class="pt-warn">Own attendance ${after.withoutPct.toFixed(1)}%, below ${after.ownMin}%</span>` : '');
             } else {
                 counts = after.capped
-                    ? `<span class="pt-warn">${after.odmlCounted} of ${after.odml} OD/ML hours count (${after.limitLabel})</span>`
+                    ? `<span class="pt-warn">${after.odmlCounted} of ${after.odml} OD/ML hours count (${after.notApplied || after.limitLabel})</span>`
                     : `${after.odml} OD/ML hour${after.odml !== 1 ? 's' : ''}, all count`;
             }
             const name = cls.subjects.find(s => s.code === code)?.name || code;
@@ -389,6 +389,13 @@
                 <label class="pt-text"><span>Or enter your own</span>
                     <input type="number" id="ptMinInput" min="1" max="100" step="0.5" value="${value}" inputmode="decimal">
                 </label>
+                <div class="pt-subhead">Applies to</div>
+                <div class="pt-options">
+                    <label class="pt-option"><input type="radio" name="ptScope" value="subject" ${overallNow() ? '' : 'checked'}>
+                        <span><strong>Each subject</strong><small>Every subject must reach the minimum on its own (most colleges).</small></span></label>
+                    <label class="pt-option"><input type="radio" name="ptScope" value="overall" ${overallNow() ? 'checked' : ''}>
+                        <span><strong>Overall</strong><small>Only your total attendance across all subjects must reach it.</small></span></label>
+                </div>
                 <div class="pt-preview" id="ptMinPreview"></div>
                 <div class="form-actions" style="justify-content: space-between;">
                     <button class="btn secondary-btn" onclick="closeModal('ptModal')">Cancel</button>
@@ -396,8 +403,19 @@
                 </div>
             </div>`;
         document.getElementById('ptMinInput').addEventListener('input', updateMinPreview);
+        modal.querySelectorAll('input[name="ptScope"]').forEach(r => r.addEventListener('change', updateMinPreview));
         updateMinPreview();
         if (!modal.classList.contains('active')) openModal('ptModal');
+    }
+
+    function overallNow() {
+        return typeof isOverallMode === 'function' ? isOverallMode() : localStorage.getItem('calcSettings_isOverall') === 'true';
+    }
+
+    function setOverall(on) {
+        localStorage.setItem('calcSettings_isOverall', on ? 'true' : 'false');
+        const box = document.getElementById('overallCriteriaCheckbox');
+        if (box) box.checked = !!on;
     }
 
     function readMin() {
@@ -415,6 +433,14 @@
         const data = (typeof currentAnalysisData !== 'undefined' && currentAnalysisData.length) ? currentAnalysisData
             : (window.SmartSearch?.computeClassAttendance ? SmartSearch.computeClassAttendance() : []);
         if (!data.length || typeof getSubjectAnalysis !== 'function') { el.innerHTML = `Calculations will use <strong>${v}%</strong>.`; return; }
+        if (document.querySelector('input[name="ptScope"]:checked')?.value === 'overall') {
+            const t = data.reduce((a, s) => ({ attended: a.attended + s.attended, totalHeld: a.totalHeld + s.totalHeld, remaining: a.remaining + s.remaining, odml: a.odml + (Number(s.odml) || 0) }), { attended: 0, totalHeld: 0, remaining: 0, odml: 0 });
+            const st = getSubjectAnalysis(t.attended, t.totalHeld, t.remaining, v / 100, t.odml).stats;
+            el.innerHTML = `
+                <div>Overall now: <strong>${st.currentPercent.toFixed(1)}%</strong> ${st.currentPercent >= v ? '— above' : '— below'} ${v}%.</div>
+                <div>${st.stillNeed > st.remaining ? `<span class="pt-warn">Can't reach ${v}% overall this semester.</span>` : `You could miss <strong>${st.maxSkippable}</strong> class${st.maxSkippable !== 1 ? 'es' : ''} in total and still finish at ${v}% overall.`}</div>`;
+            return;
+        }
         let safe = 0, risk = 0, cantReach = 0, canMiss = 0;
         data.forEach(sub => {
             const { stats } = getSubjectAnalysis(sub.attended, sub.totalHeld, sub.remaining, v / 100, sub.odml);
@@ -434,67 +460,82 @@
         const input = document.getElementById('minAttendanceInput');
         if (input) input.value = v;
         localStorage.setItem('calcSettings_minAttendance', String(v));
+        setOverall(document.querySelector('input[name="ptScope"]:checked')?.value === 'overall');
         // Medical minimum can't be above the attendance minimum
         if (typeof validateMedicalSettings === 'function') { try { validateMedicalSettings(); } catch (e) { /* ignore */ } }
         if (window.SyncManager?.saveSettings) { try { SyncManager.saveSettings(); } catch (e) { /* offline */ } }
         if (typeof recalculateEverything === 'function') recalculateEverything();
         closeModal('ptModal');
         if (window.ProfilePage) ProfilePage.render();
-        if (typeof showToast === 'function') showToast('🎯 Minimum attendance updated', `All calculations now use ${v}%.`, { duration: 3000 });
+        if (typeof showToast === 'function') showToast('🎯 Minimum attendance updated', `All calculations now use ${v}% ${overallNow() ? 'overall' : 'in each subject'}.`, { duration: 3000 });
     }
 
     // ============================================================
     // 4. OD / ML RULE
     // ============================================================
+    // Default = SRM portal: OD/ML counts from 65% own attendance, lifts you only up to 75%,
+    // and counts fully once your own attendance is 75% or more. Each part can be changed.
+    const ODML_PRESETS = {
+        srm: { own: 65, lift: 'min', aboveAll: true, hourPct: null },
+        all: { own: 0, lift: 'none', aboveAll: true, hourPct: null }
+    };
+
     function ownMinNow() {
         return typeof getMinMedicalCriteria === 'function' ? getMinMedicalCriteria() : 65;
     }
 
-    function allowancePctNow() {
-        const v = parseFloat(localStorage.getItem('calcSettings_odmlAllowancePct'));
-        return isNaN(v) ? 10 : v;
+    function odmlNow() {
+        return typeof getOdmlSettings === 'function' ? getOdmlSettings() : { lift: 'min', aboveAll: true, hourPct: null };
     }
+
+    const liftPct = (lift) => lift === 'none' || lift === null ? null : lift === 'min' ? currentMin() : parseFloat(lift);
 
     // One line describing the active rule (Profile row, previews)
     function ruleSummary() {
-        const mode = localStorage.getItem('calcSettings_odmlRule') || 'allowance';
-        if (mode === 'allowance') {
-            return `OD/ML up to ${allowancePctNow()}% of the semester's classes · own attendance ≥ ${ownMinNow()}% · total ≥ ${currentMin()}%`;
-        }
-        const cap = localStorage.getItem('calcSettings_odmlCap') || 'min';
-        if (cap === 'none') return 'All OD/ML hours count as attended';
-        return `OD/ML lifts attendance only up to ${cap === 'min' ? currentMin() : cap}%`;
+        const st = odmlNow();
+        const own = ownMinNow();
+        const lift = liftPct(st.lift);
+        const parts = [];
+        if (lift === null) parts.push(own > 0 ? `OD/ML counts from ${own}% own attendance` : 'All OD/ML counts');
+        else parts.push(`OD/ML counts from ${own}% own, lifts up to ${lift}%`);
+        if (lift !== null) parts.push(st.aboveAll ? `all counts at ${lift}%+` : `ignored at ${lift}%+`);
+        if (st.hourPct !== null && st.hourPct !== '') parts.push(`max ${st.hourPct}% of classes`);
+        parts.push(overallNow() ? 'overall' : 'per subject');
+        return parts.join(' · ');
     }
 
     function openOdmlLimit() {
-        const mode = localStorage.getItem('calcSettings_odmlRule') || 'allowance';
-        const cap = localStorage.getItem('calcSettings_odmlCap') || 'min';
-        const choice = mode === 'allowance' ? 'allowance' : cap === 'none' ? 'none' : 'cap';
+        const st = odmlNow();
+        const lift = liftPct(st.lift);
         const modal = ensureModal();
         modal.innerHTML = `
             <div class="modal-content pt-modal">
                 <button class="modal-close" onclick="closeModal('ptModal')">&times;</button>
                 <div class="pt-icon">🏥</div>
                 <h2>OD / ML rule</h2>
-                <p class="pt-lead">How your college counts Duty Leave and Medical Leave. Every calculation and recommendation follows it.</p>
-                <div class="pt-options">
-                    <label class="pt-option"><input type="radio" name="ptOdml" value="allowance" ${choice === 'allowance' ? 'checked' : ''}>
-                        <span><strong>Allowance (recommended)</strong>
-                            <small>OD/ML can cover up to <input type="number" id="ptAllowPct" min="0" max="100" step="1" value="${allowancePctNow()}" inputmode="numeric"> % of each subject's classes in the semester.</small>
-                            <small>Own attendance (present only) must stay at least <input type="number" id="ptOwnMin" min="0" max="100" step="1" value="${ownMinNow()}" inputmode="numeric"> %.</small>
-                            <small>Present + OD/ML must reach your minimum attendance (${currentMin()}%).</small></span></label>
-                    <label class="pt-option"><input type="radio" name="ptOdml" value="cap" ${choice === 'cap' ? 'checked' : ''}>
-                        <span><strong>Only up to the minimum (${currentMin()}%)</strong><small>SRM style: if your own attendance is below the minimum, OD/ML lifts you to it, not above.</small></span></label>
-                    <label class="pt-option"><input type="radio" name="ptOdml" value="none" ${choice === 'none' ? 'checked' : ''}>
-                        <span><strong>Count all OD/ML</strong><small>Every OD/ML hour counts as attended.</small></span></label>
+                <p class="pt-lead">How your college counts Duty Leave and Medical Leave. Every calculation, table and recommendation follows it.</p>
+                <div class="pt-presets pt-odml-presets">
+                    <button onclick="ProfileTools.odmlPreset('srm')">College default (SRM)</button>
+                    <button onclick="ProfileTools.odmlPreset('all')">Count all OD/ML</button>
                 </div>
+                <div class="pt-rule">
+                    <label class="pt-rule-row"><span><strong>Counts from</strong><small>Below this own attendance (present only), OD/ML doesn't count.</small></span>
+                        <span class="pt-num"><input type="number" id="ptOwnMin" min="0" max="100" step="1" value="${ownMinNow()}" inputmode="numeric">%</span></label>
+                    <label class="pt-rule-row"><span><strong>Lifts you up to</strong><small>OD/ML can raise you to this % but not above. Empty = no limit.</small></span>
+                        <span class="pt-num"><input type="number" id="ptLift" min="0" max="100" step="0.5" value="${lift ?? ''}" placeholder="none" inputmode="decimal">%</span></label>
+                    <label class="pt-rule-row"><span><strong>Already at or above that</strong><small>When your own attendance has reached the limit.</small></span>
+                        <select id="ptAbove"><option value="all" ${st.aboveAll ? 'selected' : ''}>All OD/ML counts</option><option value="none" ${st.aboveAll ? '' : 'selected'}>OD/ML ignored</option></select></label>
+                    <label class="pt-rule-row"><span><strong>Max OD/ML hours</strong><small>Limit as % of each subject's classes. Empty = no limit.</small></span>
+                        <span class="pt-num"><input type="number" id="ptHourPct" min="0" max="100" step="1" value="${st.hourPct ?? ''}" placeholder="none" inputmode="numeric">%</span></label>
+                </div>
+                <div class="pt-example" id="ptOdmlExample"></div>
                 <div class="pt-preview" id="ptOdmlPreview"></div>
                 <div class="form-actions" style="justify-content: space-between;">
                     <button class="btn secondary-btn" onclick="closeModal('ptModal')">Cancel</button>
                     <button class="btn primary-btn" onclick="ProfileTools.saveOdmlLimit()">Save</button>
                 </div>
             </div>`;
-        modal.querySelectorAll('input').forEach(i => {
+        modal.querySelectorAll('input, select').forEach(i => {
             i.addEventListener('input', updateOdmlPreview);
             i.addEventListener('change', updateOdmlPreview);
         });
@@ -502,71 +543,96 @@
         if (!modal.classList.contains('active')) openModal('ptModal');
     }
 
+    function odmlPreset(name) {
+        const p = ODML_PRESETS[name];
+        if (!p) return;
+        const set = (id, v) => { const i = document.getElementById(id); if (i) i.value = v; };
+        set('ptOwnMin', p.own);
+        set('ptLift', p.lift === 'min' ? currentMin() : p.lift === 'none' ? '' : p.lift);
+        set('ptAbove', p.aboveAll ? 'all' : 'none');
+        set('ptHourPct', p.hourPct ?? '');
+        updateOdmlPreview();
+    }
+
     function readOdmlChoice() {
-        const choice = document.querySelector('input[name="ptOdml"]:checked')?.value || 'allowance';
-        const pct = parseFloat(document.getElementById('ptAllowPct')?.value);
-        const own = parseFloat(document.getElementById('ptOwnMin')?.value);
-        if (choice === 'allowance' && (isNaN(pct) || pct < 0 || pct > 100 || isNaN(own) || own < 0 || own > 100)) return null;
-        return { choice, pct, own };
+        const num = (id) => { const v = (document.getElementById(id)?.value || '').trim(); return v === '' ? null : parseFloat(v); };
+        const own = num('ptOwnMin') ?? 0;
+        const lift = num('ptLift');
+        const hourPct = num('ptHourPct');
+        const bad = (v) => v !== null && (isNaN(v) || v < 0 || v > 100);
+        if (bad(own) || bad(lift) || bad(hourPct)) return null;
+        if (lift !== null && lift < own) return null;
+        return {
+            own,
+            // Following the minimum keeps the limit right if the minimum changes later
+            lift: lift === null ? 'none' : Math.abs(lift - currentMin()) < 1e-9 ? 'min' : lift,
+            aboveAll: (document.getElementById('ptAbove')?.value || 'all') === 'all',
+            hourPct
+        };
     }
 
     // Apply a choice to storage; returns a function that restores the previous values
     function applyOdmlChoice(c) {
-        const keys = ['calcSettings_odmlRule', 'calcSettings_odmlCap', 'calcSettings_odmlAllowancePct'];
-        const before = keys.map(k => localStorage.getItem(k));
+        const before = localStorage.getItem('calcSettings_odmlRule3');
         const medInput = document.getElementById('minMedicalInput');
         const medBefore = medInput ? medInput.value : null;
-        if (c.choice === 'allowance') {
-            localStorage.setItem('calcSettings_odmlRule', 'allowance');
-            localStorage.setItem('calcSettings_odmlAllowancePct', String(c.pct));
-            if (medInput) medInput.value = c.own;
-        } else {
-            localStorage.setItem('calcSettings_odmlRule', 'cap');
-            localStorage.setItem('calcSettings_odmlCap', c.choice === 'none' ? 'none' : 'min');
-        }
+        localStorage.setItem('calcSettings_odmlRule3', JSON.stringify({ lift: c.lift, aboveAll: c.aboveAll, hourPct: c.hourPct }));
+        if (medInput) { medInput.max = 100; medInput.value = c.own; }
         return () => {
-            keys.forEach((k, i) => { if (before[i] === null) localStorage.removeItem(k); else localStorage.setItem(k, before[i]); });
+            if (before === null) localStorage.removeItem('calcSettings_odmlRule3'); else localStorage.setItem('calcSettings_odmlRule3', before);
             if (medInput && medBefore !== null) medInput.value = medBefore;
         };
+    }
+
+    // Worked examples for the rule being edited (7 OD/ML hours out of 100 classes)
+    function exampleLine() {
+        if (typeof attendanceSplit !== 'function') return '';
+        return [64, 65, 70, 75].map(own => {
+            const r = attendanceSplit(own + 7, 100, 7, 0).withPct;
+            return `<span>${own}% + 7 → <strong>${Math.round(r * 100) / 100}%</strong></span>`;
+        }).join('');
     }
 
     // Each subject with OD/ML under the chosen rule
     function updateOdmlPreview() {
         const el = document.getElementById('ptOdmlPreview');
+        const ex = document.getElementById('ptOdmlExample');
         if (!el) return;
         const c = readOdmlChoice();
-        if (!c) { el.innerHTML = '<span class="pt-warn">Enter percentages between 0 and 100.</span>'; return; }
+        if (!c) {
+            el.innerHTML = '<span class="pt-warn">Use percentages between 0 and 100; "lifts up to" can\'t be below "counts from".</span>';
+            if (ex) ex.innerHTML = '';
+            return;
+        }
         const data = (typeof currentAnalysisData !== 'undefined' && currentAnalysisData.length) ? currentAnalysisData : [];
         const withOd = data.filter(s => Number(s.odml) > 0);
-        if (!withOd.length) { el.innerHTML = 'No OD/ML hours marked yet, so nothing changes right now.'; return; }
 
         // Preview only: the previous settings are restored right after (no save, no sync)
         window.bunkitRecalcRunning = true;
         const restore = applyOdmlChoice(c);
-        let rows = '';
+        let rows = '', example = '';
         try {
+            example = exampleLine();
             rows = withOd.map(s => {
                 const sp = attendanceSplit(s.attended, s.totalHeld, s.odml, s.remaining);
-                const note = sp.rule === 'allowance'
-                    ? `${Math.min(sp.odml, sp.allowance)}/${sp.allowance} h${sp.odmlUnused ? `, ${sp.odmlUnused} over` : ''}${sp.eligible ? '' : ', own too low'}`
-                    : sp.capped ? `${sp.odmlCounted} of ${sp.odml} h` : 'all count';
-                return `<tr><td>${esc(s.name)}</td><td>${sp.withoutPct.toFixed(1)}%</td><td><strong>${sp.withPct.toFixed(1)}%</strong></td><td class="pt-muted">${note}</td></tr>`;
+                const note = sp.notApplied ? sp.notApplied : sp.capped ? `${sp.odmlCounted} of ${sp.odml} h${sp.limitLabel ? ` (${sp.limitLabel})` : ''}` : 'all count';
+                return `<tr><td>${esc(s.name)}</td><td>${sp.withoutPct.toFixed(2)}%</td><td><strong>${sp.withPct.toFixed(2)}%</strong></td><td class="pt-muted">${note}</td></tr>`;
             }).join('');
         } finally {
             restore();
             window.bunkitRecalcRunning = false;
         }
-        el.innerHTML = `<table class="pt-impact"><thead><tr><th>Subject</th><th>Own</th><th>With OD/ML</th><th>OD/ML</th></tr></thead><tbody>${rows}</tbody></table>`;
+        if (ex) ex.innerHTML = `<div class="pt-subhead">Example · 7 OD/ML out of 100 classes</div><div class="pt-example-row">${example}</div>`;
+        el.innerHTML = withOd.length
+            ? `<table class="pt-impact"><thead><tr><th>Subject</th><th>Own</th><th>Total</th><th>OD/ML</th></tr></thead><tbody>${rows}</tbody></table>`
+            : 'No OD/ML hours marked yet, so nothing changes right now.';
     }
 
     function saveOdmlLimit() {
         const c = readOdmlChoice();
-        if (!c) { alert('Please enter percentages between 0 and 100.'); return; }
+        if (!c) { alert('Use percentages between 0 and 100. "Lifts you up to" can\'t be below "Counts from".'); return; }
         applyOdmlChoice(c);
-        if (c.choice === 'allowance') {
-            localStorage.setItem('calcSettings_minMedical', String(c.own));
-            if (typeof validateMedicalSettings === 'function') { try { validateMedicalSettings(); } catch (e) { /* ignore */ } }
-        }
+        localStorage.setItem('calcSettings_minMedical', String(c.own));
         if (window.SyncManager?.saveSettings) { try { SyncManager.saveSettings(); } catch (e) { /* offline */ } }
         if (typeof recalculateEverything === 'function') recalculateEverything();
         closeModal('ptModal');
@@ -575,7 +641,7 @@
     }
 
     window.ProfileTools = {
-        openOdmlLimit, saveOdmlLimit, ruleSummary,
+        openOdmlLimit, saveOdmlLimit, ruleSummary, odmlPreset,
         openMinAttendance, saveMin,
         pickMin(v) { const i = document.getElementById('ptMinInput'); if (i) i.value = v; updateMinPreview(); },
         openLeave, saveLeave, undoLeave,

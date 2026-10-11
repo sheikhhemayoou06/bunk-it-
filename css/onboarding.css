@@ -336,3 +336,11 @@ body.ob-lock {
     .ob-bg i, .ob-logo, .ob-emoji, .ob-option, .ob-stage.ob-in > * { animation: none !important; }
     .ob-screen, .ob-stage.ob-out { transition: none; }
 }
+
+/* More ways + share-link step */
+.ob-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 10px; margin-top: 14px; font-size: 0.85rem; opacity: 0.85; }
+.ob-more .ob-link { margin: 0; padding: 4px 6px; }
+.ob-link-row { display: flex; gap: 8px; }
+.ob-link-row input { flex: 1; min-width: 0; }
+.ob-paste { flex-shrink: 0; padding: 0 14px; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 14px; background: rgba(255, 255, 255, 0.12); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.ob-link-msg { display: block; min-height: 1.1em; margin-top: 6px; color: #fca5a5; font-size: 0.82rem; }

@@ -318,7 +318,7 @@
         if (typeof attendanceSplit === 'function') {
             const sp = attendanceSplit(present + odml, held, odml, rest);
             // eligible = own attendance meets the medical minimum (OD/ML only counts then)
-            return { own: sp.withoutPct, withOd: sp.withPct, eligible: sp.eligible || !odml, ownMin: sp.ownMin };
+            return { own: sp.withoutPct, withOd: sp.withPct, eligible: !sp.belowBand || !odml, ownMin: sp.ownMin };
         }
         return { own: (present / held) * 100, withOd: ((present + odml) / held) * 100, eligible: true };
     }
@@ -2152,7 +2152,7 @@
         const label = onlyMedical ? 'Medical leave' : onlyOd ? 'OD (duty leave)' : 'OD / Medical leave';
 
         return {
-            icon: '🏥', iconClass: rows.some(r => r.split && !r.split.eligible && r.split.odml) ? 'danger' : 'info',
+            icon: '🏥', iconClass: rows.some(r => r.split && r.split.belowBand && r.split.odml) ? 'danger' : 'info',
             title: `${label}: ${onlyMedical ? mlCount : onlyOd ? odCount : odCount + mlCount} hour${(onlyMedical ? mlCount : onlyOd ? odCount : odCount + mlCount) !== 1 ? 's' : ''} marked`,
             body: `
                 <div class="si-stats-grid">

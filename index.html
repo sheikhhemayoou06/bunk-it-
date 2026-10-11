@@ -31,7 +31,7 @@
     <script src="js/supabase-config.js"></script>
 
     <script src="js/auth-manager.js"></script>
-    <script src="js/sync-manager.js?v=5"></script>
+    <script src="js/sync-manager.js?v=8"></script>
     <script src="js/odml-view.js?v=1"></script>
     <script src="js/social-manager.js"></script>
     <!-- Firebase SDK for Cloud Messaging -->
@@ -6479,11 +6479,11 @@
     <link rel="stylesheet" href="css/smart-search.css?v=7">
     <link rel="stylesheet" href="css/smart-search-modern.css?v=5">
     <link rel="stylesheet" href="css/timetable-modes.css?v=7">
-    <link rel="stylesheet" href="css/profile-page.css?v=8">
+    <link rel="stylesheet" href="css/profile-page.css?v=10">
     <link rel="stylesheet" href="css/subjects-page.css?v=4">
     <link rel="stylesheet" href="css/day-check.css?v=8">
-    <link rel="stylesheet" href="css/onboarding.css?v=1">
-    <link rel="stylesheet" href="css/scan-results.css?v=1">
+    <link rel="stylesheet" href="css/onboarding.css?v=2">
+    <link rel="stylesheet" href="css/scan-results.css?v=2">
     <link rel="stylesheet" href="css/notifications-ig.css?v=2">
     <link rel="stylesheet" href="css/mobile-polish.css?v=4">
 </head>
@@ -8453,7 +8453,7 @@
 
                 const minAttendance = getMinAttendanceCriteria() * 100;
                 document.querySelectorAll('.dash-min-pct').forEach(el => { el.textContent = minAttendance; });
-                let totalHeld = 0, totalAttended = 0, totalOdml = 0, totalCanMiss = 0, totalNeed = 0, totalEffective = 0;
+                let totalHeld = 0, totalAttended = 0, totalOdml = 0, totalCanMiss = 0, totalNeed = 0, totalEffective = 0, totalRemaining = 0;
                 let subjectsAtRisk = 0;
                 const healthCounts = { extremelySafe: 0, safe: 0, borderline: 0, accelerate: 0 };
                 const colorOf = (cls) => `var(--dash-${cls === 'extremely-safe' ? 'safe' : cls})`;
@@ -8467,6 +8467,7 @@
                     totalHeld += subject.totalHeld;
                     totalAttended += subject.attended;
                     totalOdml += Number(subject.odml) || 0;
+                    totalRemaining += Number(subject.remaining) || 0;
                     const split = attendanceSplit(subject.attended, subject.totalHeld, subject.odml, subject.remaining);
                     const percent = split.withPct;
                     totalEffective += (percent / 100) * subject.totalHeld; // OD/ML limit applies per subject
@@ -8513,7 +8514,7 @@
                                     <div class="dash-metric-sub">${split.capped
                                         ? `${split.present} present + ${split.odmlCounted} of ${split.odml} OD/ML (${split.limitLabel})`
                                         : `${split.present + split.odmlCounted} / ${split.totalHeld} incl. ${split.odml} OD/ML`}${split.allowance !== null && split.odml
-                                        ? `<div class="dash-allow ${split.eligible ? '' : 'bad'}">OD/ML allowance: ${Math.min(split.odml, split.allowance)} of ${split.allowance} h used${split.eligible ? '' : ` · own below ${split.ownMin}%`}</div>` : ''}</div>
+                                        ? `<div class="dash-allow ${split.belowBand ? 'bad' : ''}">OD/ML allowance: ${Math.min(split.odml, split.allowance)} of ${split.allowance} h used${split.notApplied ? ` · ${split.notApplied}` : ''}</div>` : split.odml && (split.capped || split.notApplied) ? `<div class="dash-allow ${split.belowBand ? 'bad' : ''}">OD/ML: ${split.odmlCounted} of ${split.odml} h count${split.notApplied ? ` · ${split.notApplied}` : split.limitLabel ? ` (${split.limitLabel})` : ''}</div>` : ''}</div>
                                 </div>
                                 <div class="dash-metric dash-metric-plan">
                                     <div><span>You can miss</span><strong>${canMiss}</strong></div>
@@ -8530,11 +8531,26 @@
                 if (odmlToggleSlot && window.OdmlView) odmlToggleSlot.innerHTML = OdmlView.toggleHTML();
                 if (window.OdmlView) OdmlView.refresh(currentAnalysisData);
 
-                const overall = attendanceSplit(totalAttended, totalHeld, totalOdml);
-                overall.withPct = totalHeld ? (totalEffective / totalHeld) * 100 : 0;
+                // Total row follows the rule on the totals, like the college portal
+                const overall = attendanceSplit(totalAttended, totalHeld, totalOdml, totalRemaining);
+                // Overall rule: one requirement (and one medical band) for all subjects together
+                const overallRule = isOverallMode();
+                let overallStats = null;
+                if (overallRule) {
+                    overallStats = getSubjectAnalysis(totalAttended, totalHeld, totalRemaining, null, totalOdml).stats;
+                    overall.withPct = overallStats.currentPercent;
+                    totalCanMiss = overallStats.maxSkippable;
+                    totalNeed = overall.withPct >= minAttendance ? 0 : overallStats.stillNeed;
+                }
                 const overallClass = overall.withPct >= minAttendance ? 'safe' : overall.withPct >= minAttendance - 5 ? 'borderline' : 'danger';
                 const origClass = overall.withoutPct >= minAttendance ? 'safe' : overall.withoutPct >= minAttendance - 5 ? 'borderline' : 'danger';
-                const message = subjectsAtRisk === 0
+                const message = overallRule
+                    ? (overall.withPct >= minAttendance
+                        ? `Overall attendance is at or above ${minAttendance}% (your college counts all subjects together). You can still miss <strong>${totalCanMiss}</strong> class${totalCanMiss !== 1 ? 'es' : ''} in total.`
+                        : overallStats.stillNeed > overallStats.remaining
+                            ? `Overall attendance can't reach ${minAttendance}% this semester, even attending every class.`
+                            : `Overall attendance is below ${minAttendance}%. Attend <strong>${totalNeed}</strong> more class${totalNeed !== 1 ? 'es' : ''} to get back above it.`)
+                    : subjectsAtRisk === 0
                     ? `All subjects are at or above ${minAttendance}%. You can still miss <strong>${totalCanMiss}</strong> class${totalCanMiss !== 1 ? 'es' : ''} in total.`
                     : `<strong>${subjectsAtRisk}</strong> subject${subjectsAtRisk !== 1 ? 's need' : ' needs'} attention. Attend <strong>${totalNeed}</strong> more class${totalNeed !== 1 ? 'es' : ''} to get back above ${minAttendance}%.`;
                 const todayCount = typeof getTodayClassCount === 'function' ? getTodayClassCount() : 0;
@@ -9293,7 +9309,9 @@
                 // never open the setup popup behind the welcome / login screen
                 const loginScreen = document.getElementById('loginScreen');
                 if (loginScreen && getComputedStyle(loginScreen).display !== 'none') {
-                    console.log('⏸️ Onboarding waits for the login screen to close');
+                    // Check again once it has closed (it may be animating away right now)
+                    clearTimeout(window._obLoginWait);
+                    window._obLoginWait = setTimeout(checkFirstLoginPrompt, 700);
                     return;
                 }
                 if (isCheckingOnboarding) {
@@ -9354,14 +9372,9 @@
 
                 if (forceOnboarding) localStorage.removeItem('forceOnboarding');
 
-                // "Later" snoozes the setup screen for this visit only; the banner stays
-                if (sessionStorage.getItem('ob_snoozed') === '1') return;
-
-                // Signed-in users: give cloud sync a moment to bring classes down first
+                // Signed-in users: show setup right away; it closes by itself if cloud sync brings a class
                 if (user && !forceOnboarding && !isNewUser) {
-                    setTimeout(() => {
-                        if (!hasAnyClass() && sessionStorage.getItem('ob_snoozed') !== '1' && window.Onboarding) Onboarding.start({ step: 'class' });
-                    }, 2500);
+                    if (!hasAnyClass() && window.Onboarding) Onboarding.start({ step: 'class' });
                     return;
                 }
 
@@ -9390,7 +9403,7 @@
                         createProfileModals();
                         openModal('firstLoginPromptModal');
                     } else openOnboardingClassModal();
-                }, 500);
+                }, 0);
             }
 
             function openOnboardingClassModal() {
@@ -9427,93 +9440,62 @@
             }
 
             function useExampleClass() {
-                // Show Bot with glow after 3 seconds
-                setTimeout(() => {
-                    const botBtn = document.getElementById('aiChatbotButton');
-                    const botPanel = document.getElementById('aiChatPanel');
-                    if (botBtn) {
-                        document.body.appendChild(botBtn);
-                        botBtn.style.display = 'flex';
-                        botBtn.style.zIndex = '2147483647';
-                        botBtn.style.pointerEvents = 'auto';  // Ensure clicks are received
-                        botBtn.style.position = 'fixed';  // Ensure fixed positioning
-                        botBtn.classList.add('glowing-pulse');
+                const name = 'CSE Core - H (Example)';
+                const today = new Date();
+                const shift = (days) => { const d = new Date(today); d.setDate(d.getDate() + days); return formatLocalDate(d); };
+                const base = JSON.parse(JSON.stringify(defaultExampleClass['CSE Core - H']));
+                const subjects = base.subjects.map(sub => ({ ...sub }));
 
-                        // Store reference globally for click detection
-                        window._bunkmateBot = botBtn;
+                // Weekly timetable from each subject's period positions ("1,3,4" = periods 1, 3 and 4)
+                const arrangement = {};
+                for (let d = 0; d < 7; d++) {
+                    const day = [];
+                    subjects.forEach(sub => String(sub.schedule[d] || '0').split(',').map(n => parseInt(n)).filter(n => n > 0)
+                        .forEach(pn => { day[pn - 1] = sub.code; }));
+                    for (let k = 0; k < day.length; k++) if (day[k] === undefined) day[k] = null;
+                    arrangement[d] = day;
+                }
 
-                        // Direct click handler using addEventListener
-                        botBtn.addEventListener('click', function (e) {
-                            e.stopPropagation();
-                            e.preventDefault();
+                // Attendance so far: a believable mix (safe, borderline, one at risk)
+                const rates = [0.86, 0.79, 0.92, 0.74, 0.88, 0.69, 0.95, 0.9];
+                const weeks = 8;
+                subjects.forEach((sub, i) => {
+                    const perWeek = sub.schedule.reduce((n, v) => n + String(v || '0').split(',').filter(x => x.trim() && x.trim() !== '0').length, 0);
+                    const held = Math.max(4, perWeek * weeks);
+                    sub.initialTotal = held;
+                    sub.initialAttended = Math.round(held * rates[i % rates.length]);
+                });
 
-                            // Close ALL modals first
-                            document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
-
-                            // Close tutorial overlay if present
-                            const overlay = document.getElementById('bunkmateTutorialOverlay');
-                            if (overlay) overlay.remove();
-
-                            // Remove glow
-                            this.classList.remove('glowing-pulse');
-
-                            // Open chatbot panel - FORCE visibility with inline styles
-                            const panel = document.getElementById('aiChatPanel');
-                            if (panel) {
-                                panel.classList.add('active');
-                                panel.style.right = '0';
-                                panel.style.display = 'flex';
-                                panel.style.zIndex = '2147483647';
-                            }
-                        }, true);  // Capture phase
-                    }
-                    if (botPanel) {
-                        document.body.appendChild(botPanel);
-                        botPanel.style.zIndex = '2147483647';
-                    }
-                }, 3000);
-
-                // Close modal with animation
-                closeModal('onboardingClassModal');
-
+                classes[name] = {
+                    ...base,
+                    id: undefined, sharedId: undefined,
+                    subjects,
+                    holidays: [shift(9), shift(10), shift(31)],
+                    lastDate: shift(75),
+                    portalSetup: { active: false, semesterStartDate: shift(-60) },
+                    timetableMode: 'fixed',
+                    isExample: true,
+                    updatedAt: Date.now()
+                };
+                localStorage.setItem(`timetable_arrangement_${name}`, JSON.stringify(arrangement));
+                const times = {};
+                for (let p = 0; p < 7; p++) {
+                    const start = 9 * 60 + p * 55 + (p >= 4 ? 40 : 0); // lunch after period 4
+                    const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+                    times[p] = { start: hm(start), end: hm(start + 50) };
+                }
+                if (typeof savePeriodTimes === 'function') savePeriodTimes(name, times);
                 localStorage.setItem('hasCompletedOnboarding', 'true');
+                saveToStorage();
+                populateClassSelector();
 
-                // Explicitly Add Example Class
-                const exampleClassName = 'CSE Core - H';
-                // Only add if not already present (though unlikely in this flow)
-                if (!classes[exampleClassName]) {
-                    classes[exampleClassName] = JSON.parse(JSON.stringify(defaultExampleClass[exampleClassName]));
-
-                    // [NEW] Disable Portal Mode by default for Example Class
-                    if (classes[exampleClassName].portalSetup) {
-                        classes[exampleClassName].portalSetup.active = false; // key is 'active' not 'isEnabled'
-                    }
-
-                    saveToStorage();
-                    populateClassSelector(); // Refresh dropdown
-                }
-
-                // Select the example class in dropdown
-                const classSelector = document.getElementById('classSelector');
-                // exampleClassName already defined above
-
-                if (classSelector) {
-                    classSelector.value = exampleClassName;
-                    // Trigger change to load the class
-                    if (typeof handleDropdownChange === 'function') {
-                        handleDropdownChange();
-                    }
-                }
-
-                // Open the Edit/Share Class form for the example class
+                const sel = document.getElementById('classSelector');
+                if (sel) { sel.value = name; if (typeof handleDropdownChange === 'function') handleDropdownChange(); }
+                localStorage.setItem('lastOpenedClass', name);
+                if (typeof switchPage === 'function') switchPage('dashboardPage');
                 setTimeout(() => {
-                    if (typeof editSelectedClass === 'function') {
-                        editSelectedClass();
-                    }
-                }, 100);
-
-                // Show Bunkmate tutorial after 3 seconds
-                setTimeout(() => showBunkmateTutorial('example'), 3000);
+                    if (typeof showToast === 'function') showToast('Example class loaded', 'Explore freely. Delete it anytime from Profile → Class → ⋯ → Delete class.', { duration: 5500 });
+                }, 400);
             }
 
             function handleCreateNewClass() {
@@ -10629,53 +10611,13 @@
                 // POST-IMPORT TUTORIAL TRIGGER (moved here from restoreAppState which was never called)
                 if (localStorage.getItem('postImportTutorial') === 'true') {
                     localStorage.removeItem('postImportTutorial');
-                    console.log('🤖 [TUTORIAL] Flag detected in DOMContentLoaded! Starting 2s timer...');
-
-                    setTimeout(() => {
-                        console.log('🤖 [TUTORIAL] Timer complete. Showing tutorial...');
-
-                        // Ensure chatbot button exists and is visible
-                        let botBtn = document.getElementById('aiChatbotButton');
-                        if (!botBtn) {
-                            console.log('🤖 [TUTORIAL] Creating chatbot button...');
-                            botBtn = document.createElement('div');
-                            botBtn.id = 'aiChatbotButton';
-                            botBtn.innerHTML = '💬';
-                            Object.assign(botBtn.style, {
-                                position: 'fixed',
-                                bottom: '20px',
-                                right: '20px',
-                                width: '60px',
-                                height: '60px',
-                                borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                color: 'white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '24px',
-                                cursor: 'pointer',
-                                boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                                zIndex: '2147483647'
-                            });
-                            document.body.appendChild(botBtn);
-                        }
-
-                        botBtn.style.display = 'flex';
-                        botBtn.classList.add('glowing-pulse');
-
-                        // Call tutorial function
-                        if (typeof showBunkmateTutorial === 'function') {
-                            try {
-                                showBunkmateTutorial('newclass');
-                                console.log('✅ [TUTORIAL] Tutorial started successfully!');
-                            } catch (err) {
-                                console.error('❌ [TUTORIAL] Error:', err);
-                            }
-                        } else {
-                            console.error('❌ [TUTORIAL] showBunkmateTutorial not defined!');
-                        }
-                    }, 2000);
+                    // Class came from a share link: a short welcome (no old chatbot tutorial)
+                    const greet = () => {
+                        const name = document.getElementById('classSelector')?.value;
+                        if (typeof showToast === 'function') showToast('Class added 🎉', name ? `${name} is ready. Start marking attendance from Home.` : 'Your class is ready.', { duration: 4500 });
+                    };
+                    if (document.body.classList.contains('bk-splash-done')) setTimeout(greet, 600);
+                    else window.addEventListener('bk-splash-done', () => setTimeout(greet, 600), { once: true });
                 }
             });
             // === SIMPLE FIX: Auto-reload when PWA resumes from frozen state ===
@@ -11410,9 +11352,12 @@
                 }
             }
 
+            // Minimum attendance applies to each subject (default) or to all subjects together
             function isOverallMode() {
-                return document.getElementById('overallCriteriaCheckbox').checked;
+                const box = document.getElementById('overallCriteriaCheckbox');
+                return box ? box.checked : localStorage.getItem('calcSettings_isOverall') === 'true';
             }
+            window.isOverallMode = isOverallMode;
 
             function triggerRecalculation() {
                 // Save calculation settings to localStorage
@@ -12101,8 +12046,8 @@
 
                 const analysisResults = [];
 
-                // FIX: Clean up orphan log entries before aggregation
-                // This removes entries for classes not scheduled on their logged day
+                // Whole-day marks → one mark per class, then drop marks for classes not held that day
+                if (window.amsNormalizeLogs) { try { amsNormalizeLogs(); } catch (e) { /* ignore */ } }
                 if (typeof cleanupOrphanLogs === 'function') {
                     cleanupOrphanLogs();
                 }
@@ -12638,68 +12583,86 @@
             }
             window.isOdMlStatus = isOdMlStatus;
 
-            // Attendance with and without OD/ML for one subject (or totals)
-            // ==================== OD / ML RULES (Profile → OD / ML rule) ====================
-            // Two ways colleges count Duty Leave / Medical Leave:
-            //  • allowance (default): OD/ML may cover at most N% (10) of the semester's classes per
-            //    subject; your own attendance (present only) must stay ≥ the medical minimum (65);
-            //    present + counted OD/ML must reach the minimum attendance (75).
-            //  • cap (SRM style): OD/ML lifts attendance only up to a limit (the minimum by default).
+            // ==================== OD / ML RULE (Profile → OD / ML rule) ====================
+            // Default = how the SRM portal counts Duty Leave / Medical Leave:
+            //  • own attendance (present only) below 65%  → OD/ML doesn't count
+            //  • own 65% … below 75% (the minimum)         → OD/ML lifts you, but only up to 75%
+            //  • own 75% or more                           → every OD/ML hour counts
+            // e.g. 65 + 7 → 72, 70.45 + 6.82 → 75, 75 + 7 → 82, 64 + 7 → 64.
+            // Colleges differ, so each part is configurable:
+            //   ownMin   (calcSettings_minMedical)  lowest own % at which OD/ML counts
+            //   lift     'min' | 'none' | number    OD/ML can lift you up to this % (null = no limit)
+            //   aboveAll true/false                 at/above the lift limit: all OD/ML counts, or none
+            //   hourPct  number | null              OD/ML hours limited to N% of the semester's classes
+            const ODML_DEFAULT = { lift: 'min', aboveAll: true, hourPct: null };
+            function getOdmlSettings() {
+                try { return { ...ODML_DEFAULT, ...(JSON.parse(localStorage.getItem('calcSettings_odmlRule3') || 'null') || {}) }; }
+                catch (e) { return { ...ODML_DEFAULT }; }
+            }
+            window.getOdmlSettings = getOdmlSettings;
+
             function getOdmlRule() {
-                const mode = localStorage.getItem('calcSettings_odmlRule') || 'allowance';
-                if (mode === 'cap') return { mode: 'cap', cap: getOdmlCap() };
-                const pct = parseFloat(localStorage.getItem('calcSettings_odmlAllowancePct'));
-                return { mode: 'allowance', maxPct: isNaN(pct) ? 10 : pct, ownMin: getMinMedicalCriteria() };
+                const st = getOdmlSettings();
+                const lift = st.lift === 'none' || st.lift === null ? null
+                    : st.lift === 'min' ? getMinAttendanceCriteria() * 100
+                    : (isNaN(parseFloat(st.lift)) ? getMinAttendanceCriteria() * 100 : parseFloat(st.lift));
+                const hourPct = st.hourPct === null || st.hourPct === '' || isNaN(parseFloat(st.hourPct)) ? null : parseFloat(st.hourPct);
+                return {
+                    mode: hourPct !== null ? 'allowance' : 'lift',
+                    ownMin: getMinMedicalCriteria(), lift, aboveAll: st.aboveAll !== false,
+                    maxPct: hourPct, cap: lift
+                };
             }
             window.getOdmlRule = getOdmlRule;
 
-            // Cap mode only: % OD/ML can lift you to ('none' = no limit, 'min' = minimum attendance)
-            function getOdmlCap() {
-                const v = localStorage.getItem('calcSettings_odmlCap') || 'min';
-                if (v === 'none') return null;
-                if (v === 'min') return getMinAttendanceCriteria() * 100;
-                const n = parseFloat(v);
-                return isNaN(n) ? getMinAttendanceCriteria() * 100 : n;
-            }
+            // Kept for older callers: the % OD/ML can lift you to (null = no limit)
+            function getOdmlCap() { return getOdmlRule().lift; }
             window.getOdmlCap = getOdmlCap;
 
             // How much of a subject's OD/ML counts, and the resulting percentages.
-            // remaining: classes left this semester (allowance = N% of held + remaining).
-            function attendanceSplit(attended, totalHeld, odml, remaining = 0) {
+            // remaining: classes left this semester (hour limit = N% of held + remaining).
+            function attendanceSplit(attended, totalHeld, odml, remaining = 0, rule = null) {
                 attended = Number(attended) || 0;
                 totalHeld = Number(totalHeld) || 0;
                 odml = Math.min(Number(odml) || 0, attended);
                 remaining = Number(remaining) || 0;
+                rule = rule || getOdmlRule();
                 const present = attended - odml;
-                const rule = getOdmlRule();
                 const rawWithPct = totalHeld ? (attended / totalHeld) * 100 : 0;
                 const withoutPct = totalHeld ? (present / totalHeld) * 100 : 0;
-                let counted = odml, withPct = rawWithPct, allowance = null, limitLabel = '';
+                const allowance = rule.maxPct === null ? null : Math.floor((rule.maxPct / 100) * (totalHeld + remaining) + 1e-9);
+                const usable = allowance === null ? odml : Math.min(odml, allowance);
+                const belowBand = !!totalHeld && !!odml && withoutPct < rule.ownMin - 1e-9;
+                let counted = 0, limitLabel = '', notApplied = '';
 
-                if (rule.mode === 'allowance') {
-                    allowance = Math.floor((rule.maxPct / 100) * (totalHeld + remaining) + 1e-9);
-                    counted = Math.min(odml, allowance);
-                    withPct = totalHeld ? ((present + counted) / totalHeld) * 100 : 0;
-                    limitLabel = `${rule.maxPct}% allowance`;
-                } else if (rule.cap !== null && odml && totalHeld && withoutPct < rule.cap) {
-                    withPct = Math.min(rawWithPct, rule.cap);
-                    counted = Math.max(0, (withPct / 100) * totalHeld - present);
-                    limitLabel = `limit ${Math.round(rule.cap * 10) / 10}%`;
-                }
+                if (!totalHeld || !odml) counted = 0;
+                else if (belowBand) { counted = 0; notApplied = `own below ${rule.ownMin}%`; }
+                else if (rule.lift !== null && withoutPct < rule.lift - 1e-9) {
+                    // Lift up to the limit, never above it
+                    counted = Math.min(usable, Math.max(0, (rule.lift / 100) * totalHeld - present));
+                    if (counted < usable - 1e-9) limitLabel = `up to ${Math.round(rule.lift * 100) / 100}%`;
+                } else if (rule.lift !== null && !rule.aboveAll) {
+                    counted = 0; notApplied = `not needed above ${Math.round(rule.lift * 100) / 100}%`;
+                } else counted = usable;
+                if (!limitLabel && allowance !== null && usable < odml) limitLabel = `${rule.maxPct}% hour limit`;
+
                 counted = Math.round(counted * 100) / 100;
+                const withPct = totalHeld ? ((present + counted) / totalHeld) * 100 : 0;
                 return {
                     present, odml, attended, totalHeld, remaining,
                     withPct, rawWithPct, withoutPct,
                     odmlCounted: counted,
                     odmlUnused: Math.round((odml - counted) * 100) / 100,
                     capped: counted < odml - 1e-9,
-                    limitLabel,
+                    limitLabel, notApplied,
                     rule: rule.mode,
-                    allowance,                                                     // hours (allowance mode)
+                    allowance,                                                     // hours (hour limit set)
                     allowanceLeft: allowance === null ? null : Math.max(0, allowance - odml),
-                    ownMin: rule.mode === 'allowance' ? rule.ownMin : null,
-                    // OD/ML only helps while your own attendance is at least the medical minimum
-                    eligible: rule.mode !== 'allowance' || !totalHeld || withoutPct >= rule.ownMin
+                    ownMin: rule.ownMin,
+                    ownMax: rule.aboveAll ? null : rule.lift,
+                    lift: rule.lift,
+                    eligible: !belowBand && !notApplied,
+                    belowBand
                 };
             }
             window.attendanceSplit = attendanceSplit;
@@ -12711,7 +12674,8 @@
                 const lines = [];
                 lines.push(`${plan.used} of ${plan.allowance} OD/ML hours used${plan.left ? `, ${plan.left} left` : ', allowance used up'}.`);
                 if (plan.unused) lines.push(`${plan.unused} OD/ML hour${plan.unused !== 1 ? 's are' : ' is'} over the allowance and won't count.`);
-                if (!plan.eligible) lines.push(`Your own attendance is below ${plan.ownMin}%, so OD/ML won't save you until it's back up.`);
+                if (plan.belowBand) lines.push(`Your own attendance is below ${plan.ownMin}%, so OD/ML won't count until it's back up.`);
+                else if (!plan.eligible && plan.ownMax !== null) lines.push(`Your own attendance is above ${plan.ownMax}%, so OD/ML isn't needed right now.`);
                 if (plan.needWithoutMore > remaining) {
                     lines.push(`Even attending all ${remaining} remaining classes isn't enough for ${minPct}% without more OD/ML.`);
                 } else {
@@ -12744,36 +12708,33 @@
                 const split = attendanceSplit(attended, totalHeld, odml, remaining);
                 let stillNeed, maxSkippable, currentPercent, projectedMaxPercent, projectedMinPercent, safeSkipPercent, allowancePlan = null;
 
-                if (split.rule === 'allowance') {
-                    // End of semester: present + counted OD/ML ≥ minimum, and present alone ≥ medical minimum
+                // End of semester, attending n more of the remaining classes, judged with the same rule
+                const rule = getOdmlRule();
+                const finalPct = (n, ml) => finalTotal
+                    ? attendanceSplit(split.present + n + ml, finalTotal, ml, 0, rule).withPct : 0;
+                const needFor = (ml) => {
+                    for (let n = 0; n <= remaining; n++) if (finalPct(n, ml) >= minCriteria * 100 - 1e-9) return n;
+                    return Math.max(remaining + 1, minRequired - split.present - ml);
+                };
+                stillNeed = needFor(split.odml);
+                maxSkippable = Math.max(0, remaining - stillNeed);
+                currentPercent = split.withPct;
+                projectedMaxPercent = finalPct(remaining, split.odml);
+                projectedMinPercent = finalPct(0, split.odml);
+                safeSkipPercent = finalPct(Math.min(stillNeed, remaining), split.odml);
+                if (split.allowance !== null) {
+                    // Hour limit set: what using the rest of it (with certificates) would do
                     const ownRequired = finalTotal > 0 ? Math.ceil((split.ownMin / 100) * finalTotal - 1e-9) : 0;
-                    const needOwn = ownRequired - split.present;
-                    stillNeed = Math.max(0, minRequired - (split.present + split.odmlCounted), needOwn);
-                    maxSkippable = Math.max(0, remaining - stillNeed);
-                    const at = (n) => finalTotal ? (n / finalTotal) * 100 : 0;
-                    currentPercent = split.withPct;
-                    projectedMaxPercent = at(split.present + remaining + split.odmlCounted);
-                    projectedMinPercent = at(split.present + split.odmlCounted);
-                    safeSkipPercent = at(split.present + stillNeed + split.odmlCounted);
-                    // Using the whole allowance (remaining OD/ML hours with certificates)
                     const left = split.allowanceLeft;
-                    const needWithFull = Math.max(0, minRequired - (split.present + split.allowance), needOwn);
+                    const needWithFull = needFor(Math.max(split.odml, split.allowance));
                     allowancePlan = {
                         allowance: split.allowance, used: Math.min(split.odml, split.allowance), left,
-                        unused: split.odmlUnused, ownMin: split.ownMin, ownRequired, minRequired,
+                        unused: Math.max(0, split.odml - split.allowance), ownMin: split.ownMin, ownMax: split.ownMax, ownRequired, minRequired,
                         needWithoutMore: stillNeed, needWithFull,
                         coverable: Math.min(left, Math.max(0, remaining - needWithFull)),
                         freeSkipsWithFull: Math.max(0, remaining - needWithFull - left),
-                        eligible: split.eligible
+                        eligible: split.eligible, belowBand: split.belowBand
                     };
-                } else {
-                    stillNeed = Math.max(0, minRequired - attended);
-                    maxSkippable = Math.max(0, remaining - stillNeed);
-                    // Percentages follow the OD/ML limit (same OD/ML hours, more classes held later)
-                    currentPercent = cappedWithPct(attended, totalHeld, odml);
-                    projectedMaxPercent = cappedWithPct(attended + remaining, finalTotal, odml);
-                    projectedMinPercent = cappedWithPct(attended, finalTotal, odml);
-                    safeSkipPercent = cappedWithPct(attended + stillNeed, finalTotal, odml);
                 }
 
                 let alertClass = '', alertMessage = '';
@@ -12793,9 +12754,9 @@
                     alertClass = 'success';
                     alertMessage = `<strong>On Track!</strong> You can afford to miss up to <strong>${maxSkippable}</strong> more classes.`;
                 }
-                if (allowancePlan && !allowancePlan.eligible && odml > 0) {
+                if (split.belowBand && currentPercent < minCriteria * 100) {
                     alertClass = 'danger';
-                    alertMessage = `<strong>Own attendance below ${allowancePlan.ownMin}%.</strong> OD/ML only counts when your own attendance is at least ${allowancePlan.ownMin}%.` + (alertMessage ? `<br>${alertMessage}` : '');
+                    alertMessage = `<strong>Own attendance below ${split.ownMin}%.</strong> OD/ML only counts when your own attendance is at least ${split.ownMin}%.` + (alertMessage ? `<br>${alertMessage}` : '');
                 }
                 return { alertClass, alertMessage, stats: { currentPercent, projectedMaxPercent, projectedMinPercent, safeSkipPercent, remaining, stillNeed, maxSkippable, finalTotal, attended, totalHeld, allowancePlan, split } };
             }
@@ -13184,6 +13145,21 @@
                 });
             }
             window.getDaySlots = getDaySlots;
+
+            // A class that hasn't finished yet: any future date, or today before its end time
+            // (needs class timings). "Mark all" buttons skip these so a tap at 11 AM can't
+            // mark the afternoon classes too.
+            function isClassUpcoming(className, dateStr, key) {
+                const today = formatLocalDate(new Date());
+                if (dateStr !== today) return dateStr > today;
+                const slot = getDaySlots(className, dateStr).find(s => s && s.key === key);
+                const t = slot ? (getPeriodTimes(className) || {})[slot.idx] : null;
+                if (!t || !/^\d{1,2}:\d{2}$/.test(t.end || '')) return false; // no timings: can't tell
+                const [h, m] = t.end.split(':').map(Number);
+                const now = new Date();
+                return now.getHours() * 60 + now.getMinutes() < h * 60 + m;
+            }
+            window.isClassUpcoming = isClassUpcoming;
 
             /**
              * Check for attendance log conflicts in a date range
@@ -20760,7 +20736,14 @@ RULES:
                     // OR if logs are COMPLETE (no gaps from sem start to today),
                     // trust the LOGS (Fact) over the BASELINE (Estimate).
                     // This fixes the case where user backfills logs (e.g. 45/100) but baseline was higher (50/100).
-                    if (logStatus.allComplete || (past.total >= base.total && base.total > 0)) {
+                    if (base.exact) {
+                        // "Match portal": the portal's own numbers up to the baseline date are the truth
+                        effectiveStats[code] = {
+                            attended: base.attended || 0,
+                            total: base.total || 0,
+                            odml: Math.min(base.attended || 0, Number(base.odml) || 0)
+                        };
+                    } else if (logStatus.allComplete || (past.total >= base.total && base.total > 0)) {
                         effectiveStats[code] = {
                             attended: past.attended,
                             total: past.total,
@@ -20773,7 +20756,7 @@ RULES:
                         effectiveStats[code] = {
                             attended: Math.max(base.attended, past.attended),
                             total: Math.max(base.total, past.total),
-                            odml: useLogs ? past.odml : 0
+                            odml: useLogs ? past.odml : Math.min(base.attended || 0, Number(base.odml) || 0)
                         };
                     }
                 });
@@ -27534,19 +27517,19 @@ Answer helpfully using this context.`;
                     });
                 </script>
                 <!-- Attendance Management System -->
-                <script src="js/attendance-management.js?v=17"></script>
-                <script src="js/smart-search.js?v=27"></script>
+                <script src="js/attendance-management.js?v=22"></script>
+                <script src="js/smart-search.js?v=28"></script>
                 <script src="js/smart-attach.js?v=1"></script>
                 <script src="js/timetable-modes.js?v=7"></script>
                 <script src="js/profile-page.js?v=11"></script>
-                <script src="js/scan-results.js?v=2"></script>
+                <script src="js/scan-results.js?v=3"></script>
                 <script src="js/subjects-page.js?v=7"></script>
-                <script src="js/day-check.js?v=2"></script>
-                <script src="js/notification-center.js?v=6"></script>
-                <script src="js/class-reminders.js?v=1"></script>
-                <script src="js/profile-tools.js?v=4"></script>
+                <script src="js/day-check.js?v=3"></script>
+                <script src="js/notification-center.js?v=7"></script>
+                <script src="js/class-reminders.js?v=2"></script>
+                <script src="js/profile-tools.js?v=7"></script>
                 <script src="js/attendance-calendar.js?v=3"></script>
-                <script src="js/onboarding.js?v=2"></script>
+                <script src="js/onboarding.js?v=5"></script>
                 <!-- Toast Container -->
                 <div id="toast-container"></div>
 

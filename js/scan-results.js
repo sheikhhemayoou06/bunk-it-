@@ -135,9 +135,40 @@
         return window.OdmlView ? OdmlView.pair(fmt(withP), fmt(ownP)) : fmt(withP);
     }
 
+    let lastScan = [];
+
+    // Make the class match the scanned portal numbers exactly: they become the baseline
+    // (up to today) and only classes marked after today are added on top
+    function matchPortal() {
+        const name = (typeof getActiveClassKey === 'function' && getActiveClassKey()) || document.getElementById('classSelector')?.value;
+        const cls = name && typeof classes !== 'undefined' ? classes[name] : null;
+        if (!cls) { alert('Select your class first, then scan again.'); return; }
+        const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const baseline = {};
+        const missing = [];
+        lastScan.forEach(s => {
+            const sub = cls.subjects.find(x => norm(x.code) === norm(s.code))
+                || cls.subjects.find(x => norm(x.name) && norm(x.name) === norm(s.name));
+            if (!sub) { missing.push(s.name || s.code); return; }
+            baseline[sub.code] = { attended: Number(s.attended) || 0, total: Number(s.totalHeld) || 0, odml: Number(s.odml) || 0, exact: true };
+        });
+        const matched = Object.keys(baseline).length;
+        if (!matched) { alert("None of the scanned subjects match your class's subjects."); return; }
+        const today = formatLocalDate(new Date());
+        if (!confirm(`Use these portal numbers for ${matched} subject${matched !== 1 ? 's' : ''}?\n\nEverything up to today (${today}) will match the portal exactly. Classes you mark from tomorrow are added on top.${missing.length ? `\n\nNot in your class (skipped): ${missing.join(', ')}` : ''}`)) return;
+        cls.portalSetup = { ...(cls.portalSetup || {}), active: true, baselineDate: today, baselineData: baseline };
+        if (typeof selectedClass !== 'undefined' && selectedClass && (selectedClass.name === name || !selectedClass.name)) selectedClass.portalSetup = cls.portalSetup;
+        if (typeof persistSelectedClass === 'function') persistSelectedClass(); else localStorage.setItem('attendanceClasses_v2', JSON.stringify(classes));
+        if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e) { /* offline */ } }
+        close();
+        if (typeof recalculateEverything === 'function') { try { recalculateEverything({ quiet: false }); } catch (e) { /* ignore */ } }
+        if (typeof showToast === 'function') showToast('✅ Matched to portal', `${matched} subject${matched !== 1 ? 's' : ''} now use your portal numbers up to ${today}.`, { duration: 4500 });
+    }
+
     function show() {
         const data = (typeof currentAnalysisData !== 'undefined' && currentAnalysisData) || [];
         if (!data.length) { error(); return; }
+        lastScan = data.map(s => ({ code: s.code, name: s.name, attended: s.attended, totalHeld: s.totalHeld, odml: s.odml }));
         clearTimers();
         const minC = typeof getMinAttendanceCriteria === 'function' ? getMinAttendanceCriteria() : 0.75;
         const min = Math.round(minC * 1000) / 10;
@@ -231,6 +262,7 @@
             </div>
             <div class="sv-footer">
                 <button class="sv-btn" onclick="ScanResults.retry()"><i class="fa-solid fa-camera"></i> Scan again</button>
+                ${className ? '<button class="sv-btn" onclick="ScanResults.matchPortal()"><i class="fa-solid fa-link"></i> Match my class</button>' : ''}
                 <button class="sv-btn sv-btn-primary" onclick="ScanResults.close()"><i class="fa-solid fa-check"></i> Done</button>
             </div>`;
         if (window.OdmlView) OdmlView.refresh(data);
@@ -241,5 +273,5 @@
         if (e.key === 'Escape' && document.getElementById('scanView')?.classList.contains('sv-open')) close(false);
     });
 
-    window.ScanResults = { loading, show, error, close, retry, loaderHTML, animateLoader };
+    window.ScanResults = { loading, show, error, close, retry, loaderHTML, animateLoader, matchPortal };
 })();
