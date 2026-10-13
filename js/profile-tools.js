@@ -15,8 +15,8 @@
     'use strict';
 
     const TYPES = {
-        od: { status: 'Duty Leave (OD)', label: 'OD (Duty Leave)', icon: '📋' },
-        ml: { status: 'Medical Leave (ML)', label: 'Medical Leave', icon: '🏥' }
+        od: { status: 'Duty Leave (OD)', label: 'OD (Duty Leave)', icon: '' },
+        ml: { status: 'Medical Leave (ML)', label: 'Medical Leave', icon: '' }
     };
 
     function esc(str) {
@@ -314,7 +314,7 @@
         modal.innerHTML = `
             <div class="modal-content pt-modal">
                 <button class="modal-close" onclick="closeModal('ptModal')">&times;</button>
-                <div class="pt-icon">📝</div>
+                <div class="pt-icon"><i class="fa-solid fa-file-pen"></i></div>
                 <h2>Exam days</h2>
                 <p class="pt-lead">Days you must attend. They're never suggested for leave, and you're warned if a planned leave includes one.</p>
 
@@ -356,7 +356,7 @@
         updateClass(c => {
             c.examDays = (c.examDays || []).concat({ id: 'ex' + Date.now(), title, from, to });
         });
-        if (typeof showToast === 'function') showToast('📝 Exam days saved', `${title}: ${fmt(from)}${to !== from ? ` → ${fmt(to)}` : ''}`, { duration: 3000 });
+        if (typeof showToast === 'function') showToast('Exam days saved', `${title}: ${fmt(from)}${to !== from ? ` → ${fmt(to)}` : ''}`, { duration: 3000 });
         openExams();
     }
 
@@ -380,7 +380,7 @@
         modal.innerHTML = `
             <div class="modal-content pt-modal">
                 <button class="modal-close" onclick="closeModal('ptModal')">&times;</button>
-                <div class="pt-icon">🎯</div>
+                <div class="pt-icon"><i class="fa-solid fa-bullseye"></i></div>
                 <h2>Minimum attendance required</h2>
                 <p class="pt-lead">The percentage your college requires. Every calculation uses it: status, classes you can miss, advice and notifications.</p>
                 <div class="pt-presets">
@@ -467,7 +467,7 @@
         if (typeof recalculateEverything === 'function') recalculateEverything();
         closeModal('ptModal');
         if (window.ProfilePage) ProfilePage.render();
-        if (typeof showToast === 'function') showToast('🎯 Minimum attendance updated', `All calculations now use ${v}% ${overallNow() ? 'overall' : 'in each subject'}.`, { duration: 3000 });
+        if (typeof showToast === 'function') showToast('Minimum attendance updated', `All calculations now use ${v}% ${overallNow() ? 'overall' : 'in each subject'}.`, { duration: 3000 });
     }
 
     // ============================================================
@@ -511,7 +511,7 @@
         modal.innerHTML = `
             <div class="modal-content pt-modal">
                 <button class="modal-close" onclick="closeModal('ptModal')">&times;</button>
-                <div class="pt-icon">🏥</div>
+                <div class="pt-icon"><i class="fa-solid fa-briefcase-medical"></i></div>
                 <h2>OD / ML rule</h2>
                 <p class="pt-lead">How your college counts Duty Leave and Medical Leave. Every calculation, table and recommendation follows it.</p>
                 <div class="pt-presets pt-odml-presets">
@@ -637,7 +637,7 @@
         if (typeof recalculateEverything === 'function') recalculateEverything();
         closeModal('ptModal');
         if (window.ProfilePage) ProfilePage.render();
-        if (typeof showToast === 'function') showToast('🏥 OD / ML rule updated', ruleSummary(), { duration: 3500 });
+        if (typeof showToast === 'function') showToast('OD / ML rule updated', ruleSummary(), { duration: 3500 });
     }
 
     window.ProfileTools = {

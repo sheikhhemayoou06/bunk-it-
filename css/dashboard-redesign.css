@@ -1241,3 +1241,39 @@ body.dark-mode .dash-badge.extremely-safe {
         grid-column: auto;
     }
 }
+
+/* ============================================================
+   HOME (top section to Today's Timetable): professional Aurora
+   ============================================================ */
+#dashboardPage {
+    --pro-1: #4f46e5; --pro-2: #7c3aed;
+    --pro-grad: linear-gradient(135deg, #4f46e5 0%, #6d28d9 60%, #7c3aed 100%);
+    background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .10), transparent 70%), var(--dash-bg, #f8fafc);
+}
+body.dark-mode #dashboardPage { background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .22), transparent 70%), var(--dash-bg, #0f172a); }
+#dashboardPage .dash-user-info h1 { font-weight: 800; letter-spacing: -0.5px; }
+#dashboardPage .dash-user-info p { color: var(--dash-text-muted, #64748b); }
+#dashboardPage .dash-top-actions > * { border-radius: 14px !important; border: 1px solid var(--dash-border, #e5e9f0) !important; background: var(--dash-card-bg, #fff) !important; box-shadow: 0 6px 18px -14px rgba(15, 23, 42, .5) !important; }
+#dashboardPage .dash-hero { background: var(--pro-grad) !important; border-radius: 24px !important; box-shadow: 0 22px 44px -24px rgba(79, 70, 229, .75) !important; position: relative; overflow: hidden; }
+#dashboardPage .dash-hero::after { content: ''; position: absolute; right: -80px; top: -80px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.18), transparent 70%); pointer-events: none; }
+#dashboardPage .dash-hero-chips > * { background: rgba(255, 255, 255, .16) !important; border: 1px solid rgba(255, 255, 255, .22); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+#dashboardPage .dash-stat-card { border-radius: 20px !important; border: 1px solid var(--dash-border, #e5e9f0) !important; box-shadow: 0 14px 30px -24px rgba(15, 23, 42, .55) !important; transition: transform .15s, box-shadow .15s; }
+#dashboardPage .dash-stat-card:hover { transform: translateY(-2px); box-shadow: 0 18px 34px -22px rgba(79, 70, 229, .45) !important; }
+#dashboardPage .dash-stat-icon { border-radius: 14px !important; color: #fff !important; box-shadow: 0 8px 16px -10px rgba(15, 23, 42, .6); }
+#dashboardPage .dash-stat-icon i { color: #fff !important; }
+#dashboardPage .dash-icon-safe { background: linear-gradient(135deg, #059669, #10b981) !important; }
+#dashboardPage .dash-icon-orange { background: linear-gradient(135deg, #ea580c, #f59e0b) !important; }
+#dashboardPage .dash-icon-blue { background: linear-gradient(135deg, #2563eb, #4f46e5) !important; }
+#dashboardPage .dash-icon-red { background: linear-gradient(135deg, #dc2626, #e11d48) !important; }
+#dashboardPage .dash-stat-value { font-weight: 800; letter-spacing: -0.5px; }
+#dashboardPage .dash-timetable-card { border-radius: 24px !important; border: 1px solid var(--dash-border, #e5e9f0) !important; box-shadow: 0 18px 40px -30px rgba(15, 23, 42, .55) !important; }
+#dashboardPage .dash-timetable-card .dash-title { font-weight: 800; }
+#dashboardPage .dash-timetable-card .dash-title i { color: var(--pro-1); }
+#dashboardPage .dash-class-item { border-radius: 16px !important; border: 1px solid var(--dash-border, #e5e9f0); background: var(--dash-card-bg, #fff); }
+#dashboardPage .dash-class-live { border-color: color-mix(in srgb, #10b981 55%, transparent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, #10b981 14%, transparent); }
+#dashboardPage .dash-class-time span:first-child { color: var(--pro-1); }
+#dashboardPage .dash-view-full-btn { border-radius: 14px !important; background: color-mix(in srgb, var(--pro-1) 8%, var(--dash-card-bg, #fff)) !important; color: var(--pro-1) !important; font-weight: 700; border: 1px solid color-mix(in srgb, var(--pro-1) 18%, transparent); }
+#dashboardPage .dash-view-full-btn:hover { background: var(--pro-grad) !important; color: #fff !important; }
+/* Line icons that replaced emoji in pop-ups, menus and empty states */
+.dc-icon i, .pt-icon i, .ob-emoji i, .ams-empty-icon i, .tm-change-icon i, .tm-mm-ic i, .si-weekend-icon i { color: #4f46e5; }
+body.dark-mode .dc-icon i, body.dark-mode .pt-icon i, body.dark-mode .ob-emoji i, body.dark-mode .ams-empty-icon i, body.dark-mode .tm-change-icon i, body.dark-mode .tm-mm-ic i, body.dark-mode .si-weekend-icon i { color: #a5b4fc; }

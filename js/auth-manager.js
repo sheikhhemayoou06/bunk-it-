@@ -108,7 +108,7 @@ const AuthManager = {
                 const loadingOverlay = document.createElement('div');
                 loadingOverlay.id = 'authLoadingOverlay';
                 loadingOverlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.9); z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction:column; font-family:sans-serif;';
-                loadingOverlay.innerHTML = '<div style="font-size:1.5rem; margin-bottom:10px;">☁️</div><div>Syncing your data...</div>';
+                loadingOverlay.innerHTML = '<div style="font-size:1.5rem; margin-bottom:10px;"><i class="fa-solid fa-cloud-arrow-down"></i></div><div>Syncing your data...</div>';
                 document.body.appendChild(loadingOverlay);
 
                 try {
@@ -295,7 +295,7 @@ const AuthManager = {
     async deleteAccount() {
         if (!window.supabaseClient || !this.user) return;
 
-        if (!confirm("⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY delete your account?\n\nThis will wipe all your synced classes, logs, and settings immediately. This action cannot be undone.")) {
+        if (!confirm("DANGER ZONE\n\nAre you sure you want to PERMANENTLY delete your account?\n\nThis will wipe all your synced classes, logs, and settings immediately. This action cannot be undone.")) {
             return;
         }
 
@@ -312,7 +312,7 @@ const AuthManager = {
 
             if (error) throw error;
 
-            alert("Account deleted without mercy. Goodbye! 👋");
+            alert("Account deleted without mercy. Goodbye!");
             await this.signOut();
 
         } catch (e) {

@@ -276,7 +276,7 @@
         const cls = getSelectedClassObj();
         if (!cls) {
             return {
-                icon: '📭', iconClass: 'warning',
+                icon: '', iconClass: 'warning',
                 title: 'No Class Selected',
                 body: `<div class="si-empty-state">
                     <div class="si-empty-icon"><i class="fa-solid fa-graduation-cap"></i></div>
@@ -286,7 +286,7 @@
             };
         }
         return {
-            icon: '📭', iconClass: 'warning',
+            icon: '', iconClass: 'warning',
             title: 'No Attendance Data Yet',
             body: `<div class="si-empty-state">
                 <div class="si-empty-icon"><i class="fa-solid fa-calendar-check"></i></div>
@@ -660,7 +660,7 @@
 
         if (leaveDates.length === 0 || classDays.length === 0) {
             return {
-                icon: pastDates.length && !leaveDates.length ? '🕒' : '🎉',
+                icon: pastDates.length && !leaveDates.length ? '' : '',
                 iconClass: pastDates.length && !leaveDates.length ? 'info' : 'safe',
                 title: pastDates.length && !leaveDates.length ? 'Those Dates Have Passed' : 'No Classes on Those Days',
                 body: `<p><strong>${rangeLabel}</strong>: ${leaveDates.length === 0 ? 'there are no upcoming class days to analyse.' : 'you have <strong>no scheduled classes</strong>, so this leave has <strong>zero impact</strong> on your attendance.'}</p>${notesHtml}`
@@ -706,8 +706,8 @@
             if (m > 0 && !ok) atRisk++;
 
             const badge = m === 0 ? '<span class="si-badge safe">No class</span>'
-                : ok ? `<span class="si-badge ${skipsLeft <= 2 ? 'warning' : 'safe'}">✅ ${skipsLeft} left</span>`
-                    : `<span class="si-badge danger">❌ Short by ${-skipsLeft}</span>`;
+                : ok ? `<span class="si-badge ${skipsLeft <= 2 ? 'warning' : 'safe'}">${skipsLeft} left</span>`
+                    : `<span class="si-badge danger">Short by ${-skipsLeft}</span>`;
             const hasOd = c.odml > 0;
             return `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
@@ -732,7 +732,7 @@
         const safe = atRisk === 0;
 
         return {
-            icon: examHits.length ? '📝' : safe ? '✅' : '⚠️',
+            icon: examHits.length ? '' : safe ? '' : '',
             iconClass: safe && !examHits.length ? 'safe' : 'danger',
             title: examHits.length ? `Not allowed: exam on ${rangeLabel}` : safe ? `Safe to take leave: ${rangeLabel}` : `Risky leave: ${rangeLabel}`,
             body: `
@@ -792,6 +792,7 @@
         [/(?:सबसे\s*)?(?:अच्छा|सही|बढ़िया)\s*दिन\s*(?:छुट्टी|बंक)?/g, ' best day to take leave '],
         // your data: holidays, OD/ML, exams, timetable, profile, semester
         [/अगली\s*छुट्टी\s*(?:कब)?/g, ' next holiday '],
+        [/कितन(?:े|ा|ी)/g, ' how many '],
         [/(?:छुट्टियों|छुट्टियाँ|छुट्टियां)\s*(?:की\s*)?(?:लिस्ट|सूची)|कौन\s*(?:कौन\s*)?सी\s*छुट्टि\S*|(?:छुट्टियाँ|छुट्टियां)\s*कब/g, ' holiday list '],
         [/(?:क्या\s*)?(\S+\s+\S+)?\s*(?:को)?\s*छुट्टी\s*है/g, ' $1 is holiday '],
         [/परीक्षा|एग्जाम|इम्तिहान/g, ' exam '],
@@ -851,6 +852,63 @@
         [/\bshukravaa?r\b/gi, 'friday'], [/\bshanivaa?r\b/gi, 'saturday'], [/\bravivaa?r\b/gi, 'sunday'],
         [/\bkitn[aie]\b/gi, 'how many']
     ];
+
+    // --- Handler: how many days of leave in a row can I take (from now) ---
+    // Walks upcoming class days in order; stops before the first day that would leave
+    // any subject unable to finish at the minimum. Exact, from the timetable.
+    const LEAVE_DAYS_RE = /\bhow\s+many\s+(?:more\s+)?days?\b.*\b(?:leave|off|skip|bunk|miss|absent|holiday|break|rest)\b|\b(?:leave|off|skip|bunk|miss|absent|holiday|break)\b.*\bhow\s+many\s+days?\b|\bhow\s+long\b.*\b(?:leave|off|skip|bunk|break|holiday)\b|\b(?:max(?:imum)?|longest)\s+(?:days?|leave|break)\b/i;
+
+    function handleLeaveDays(query) {
+        const data = getAttendanceData();
+        const cls = getSelectedClassObj();
+        if (!data.length || !cls) return noDataResponse();
+        const minCriteria = getMinCriteria();
+        const todayStr = formatLocalDateSI(new Date());
+        const pendingToday = todayPendingCounts(cls);
+        const start = Object.values(pendingToday).some(n => n > 0) ? todayStr : formatLocalDateSI(addDays(new Date(todayStr + 'T00:00:00'), 1));
+        const end = cls.lastDate;
+        const allow = {};
+        data.forEach(sub => { allow[sub.code] = analyzeSubject(sub, minCriteria).maxSkippable; });
+        const missed = {};
+        const okDays = [];
+        let blocker = null;
+        for (let d = new Date(start + 'T00:00:00'); end && formatLocalDateSI(d) <= end; d = addDays(d, 1)) {
+            const ds = formatLocalDateSI(d);
+            const exam = examOn(ds);
+            const counts = ds === todayStr ? pendingToday : classesOnDate(cls, ds);
+            const codes = Object.keys(counts).filter(c => counts[c] > 0 && allow[c] !== undefined);
+            if (!codes.length) { okDays.push({ ds, classes: 0 }); continue; }
+            if (exam) { blocker = { ds, why: `${exam.title || 'Exam'} (attendance compulsory)` }; break; }
+            const over = codes.find(c => (missed[c] || 0) + counts[c] > allow[c]);
+            if (over) { blocker = { ds, why: `${data.find(x => x.code === over)?.name || over} would drop below ${Math.round(minCriteria * 100)}% for good` }; break; }
+            codes.forEach(c => { missed[c] = (missed[c] || 0) + counts[c]; });
+            okDays.push({ ds, classes: codes.reduce((n, c) => n + counts[c], 0) });
+        }
+        // Trailing no-class days don't make the leave longer in class days; keep them for the range
+        while (okDays.length && okDays[okDays.length - 1].classes === 0 && blocker) okDays.pop();
+        const classDays = okDays.filter(x => x.classes > 0);
+        if (!end) return { iconClass: 'info', title: 'Add your last working day', body: '<p>Set the semester end date in your class settings so leave days can be counted.</p>' };
+        if (!classDays.length) {
+            return {
+                iconClass: 'danger', title: 'No safe leave days right now',
+                body: `<p>Taking leave on <strong>${fmtShort(start)}</strong> isn't safe: ${blocker ? blocker.why : 'no upcoming class days'}.</p><p>Attend the next few classes first, then ask again.</p>`
+            };
+        }
+        const from = okDays[0].ds, to = okDays[okDays.length - 1].ds;
+        const span = Math.round((new Date(to + 'T00:00:00') - new Date(from + 'T00:00:00')) / 864e5) + 1;
+        const impact = handleDateLeaveImpact(query, { today: todayStr, dates: okDays.map(x => x.ds), ranges: [{ from: new Date(from + 'T00:00:00'), to: new Date(to + 'T00:00:00') }] });
+        const lead = `
+            <div class="si-stats-grid">
+                <div class="si-stat-tile"><div class="si-stat-value safe">${classDays.length}</div><div class="si-stat-label">Class days off</div></div>
+                <div class="si-stat-tile"><div class="si-stat-value info">${span}</div><div class="si-stat-label">Days in a row</div></div>
+            </div>
+            <p>Starting <strong>${fmtShort(from)}</strong>, you can take leave on <strong>${classDays.length} class day${classDays.length !== 1 ? 's' : ''}</strong> in a row (until <strong>${fmtShort(to)}</strong>), and every subject can still finish at or above <strong>${Math.round(minCriteria * 100)}%</strong> if you attend the rest.${blocker ? ` One more day (<strong>${fmtShort(blocker.ds)}</strong>) is not safe: ${escapeHtml(blocker.why)}.` : ''}</p>`;
+        return {
+            iconClass: 'safe',
+            title: `You can take ${classDays.length} day${classDays.length !== 1 ? 's' : ''} of leave`,
+            body: lead + (impact && impact.body ? `<h4 class="si-ai-h"><i class="fa-solid fa-chart-column"></i> Impact of that leave</h4>${impact.body}` : '')
+        };
+    }
 
     function normalizeIndic(query) {
         let q = String(query || '');
@@ -1096,7 +1154,7 @@
         const overallStatus = overallNew >= minPercent ? 'safe' : 'danger';
 
         return {
-            icon: subjectsAffected > 0 ? '⚠️' : '✅',
+            icon: subjectsAffected > 0 ? '' : '',
             iconClass: subjectsAffected > 0 ? 'warning' : 'safe',
             title: `Impact of Missing ${missedTotal} Class${missedTotal !== 1 ? 'es' : ''}`,
             body: `
@@ -1138,7 +1196,7 @@
         if (lastDateInput && lastDateInput.value) lastDateStr = lastDateInput.value;
         if (!lastDateStr) {
             return {
-                icon: '⚠️', iconClass: 'warning',
+                icon: '', iconClass: 'warning',
                 title: 'Long Weekend Finder',
                 body: '<p>Please set a semester end date in your class settings to find long weekends.</p>'
             };
@@ -1203,7 +1261,7 @@
 
         if (results.length === 0) {
             return {
-                icon: '😢', iconClass: 'neutral',
+                icon: '', iconClass: 'neutral',
                 title: 'No Long Weekends Found',
                 body: '<p>No long weekend opportunities were found before the semester ends.</p>'
             };
@@ -1214,19 +1272,19 @@
 
         let cardsHtml = results.map(r => `
             <div class="si-weekend-card">
-                <div class="si-weekend-icon">🏖️</div>
+                <div class="si-weekend-icon"><i class="fa-solid fa-umbrella-beach"></i></div>
                 <div class="si-weekend-info">
                     <h4>${r.length}-Day Break (${r.numLeave} leave${r.numLeave > 1 ? 's' : ''})</h4>
                     <p>${formatDate(r.startDate)} → ${formatDate(r.endDate)}</p>
                     <div class="si-weekend-dates">
-                        ${r.leaveDates.map(d => `<span class="si-date-chip">📅 ${formatDate(d)}</span>`).join('')}
+                        ${r.leaveDates.map(d => `<span class="si-date-chip">${formatDate(d)}</span>`).join('')}
                     </div>
                 </div>
             </div>
         `).join('');
 
         return {
-            icon: '🏝️', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: `Best Long Weekends Found!`,
             body: `<p>Here are the optimal breaks you can take by using <strong>1 to 3 leaves</strong>. The algorithm finds the longest continuous break by combining holidays, weekends, and off-days.</p>${cardsHtml}`
         };
@@ -1262,17 +1320,17 @@
         });
 
         return {
-            icon: '🛡️', iconClass: minCanSkip > 0 ? 'safe' : 'danger',
+            icon: '', iconClass: minCanSkip > 0 ? 'safe' : 'danger',
             title: `Maximum Safe Skips`,
             body: `
                 <div class="si-stats-grid">
                     <div class="si-stat-tile">
                         <div class="si-stat-value ${minCanSkip > 3 ? 'safe' : minCanSkip > 0 ? 'warning' : 'danger'}">${minCanSkip}</div>
-                        <div class="si-stat-label">Min Safe Skip</div>
+                        <div class="si-stat-label">Safe skips in weakest subject</div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value info">${totalCanSkip}</div>
-                        <div class="si-stat-label">Total Across All</div>
+                        <div class="si-stat-label">Total safe skips, all subjects</div>
                     </div>
                     <div class="si-stat-tile">
                         <div class="si-stat-value warning">${minPercent}%</div>
@@ -1322,7 +1380,7 @@
         const examToday = typeof getExamOn === 'function' ? getExamOn(formatLocalDateSI(today)) : null;
         if (examToday) {
             return {
-                icon: '📝', iconClass: 'danger',
+                icon: '', iconClass: 'danger',
                 title: `No, today is an exam day`,
                 body: `<p><strong>${examToday.title}</strong> is today. Attendance is compulsory, so don't skip.</p>`
             };
@@ -1330,9 +1388,9 @@
 
         if (todaySubjects.length === 0) {
             return {
-                icon: '🎉', iconClass: 'safe',
+                icon: '', iconClass: 'safe',
                 title: 'No Classes Today!',
-                body: `<p>You have <strong>no scheduled classes</strong> today. Enjoy your day off! 🎊</p>`
+                body: `<p>You have <strong>no scheduled classes</strong> today. Enjoy your day off!</p>`
             };
         }
 
@@ -1344,14 +1402,14 @@
                 <td><strong>${sub.name || sub.code}</strong></td>
                 <td>${sub.classCount} class${sub.classCount > 1 ? 'es' : ''}</td>
                 <td>${sub.analysis.currentPercent.toFixed(1)}%</td>
-                <td><span class="si-badge ${sub.canSkip ? 'safe' : 'danger'}">${sub.canSkip ? '✅ Yes' : '❌ No'}</span></td>
+                <td><span class="si-badge ${sub.canSkip ? 'safe' : 'danger'}">${sub.canSkip ? 'Yes' : 'No'}</span></td>
             </tr>
         `).join('');
 
         return {
-            icon: allCanSkip ? '🟢' : noneCanSkip ? '🔴' : '🟡',
+            icon: allCanSkip ? '' : noneCanSkip ? '' : '',
             iconClass: allCanSkip ? 'safe' : noneCanSkip ? 'danger' : 'warning',
-            title: allCanSkip ? 'Yes, You Can Skip Today! 🎉' : noneCanSkip ? "Don't Skip Today! ⚠️" : 'Selective Skip Possible',
+            title: allCanSkip ? 'Yes, You Can Skip Today!' : noneCanSkip ? "Don't Skip Today!" : 'Selective Skip Possible',
             body: `
                 <p>${allCanSkip
                     ? `All <strong>${todaySubjects.length}</strong> classes today can be safely skipped without dropping below ${minPercent}%.`
@@ -1390,12 +1448,12 @@
                 <td class="odv-with">${s.currentPercent.toFixed(1)}%</td>
                 <td class="odv-orig">${s.withoutPercent.toFixed(1)}%</td>
                 <td>${s.attended - s.odml}/${s.totalHeld}${s.odml ? ` <small class="odv-both" style="opacity:0.7;">+${s.odml} OD/ML</small>` : ''}</td>
-                <td><span class="si-badge ${status}">${s.stillNeed > 0 ? `Need ${s.stillNeed}` : '✅ Safe'}</span></td>
+                <td><span class="si-badge ${status}">${s.stillNeed > 0 ? `Need ${s.stillNeed}` : 'Safe'}</span></td>
             </tr>`;
         }).join('');
 
         return {
-            icon: '🚨', iconClass: atRisk.length > 0 ? 'danger' : 'warning',
+            icon: '', iconClass: atRisk.length > 0 ? 'danger' : 'warning',
             title: `${atRisk.length} Subject${atRisk.length !== 1 ? 's' : ''} at Risk`,
             body: `
                 <div class="si-stats-grid">
@@ -1412,7 +1470,7 @@
                         <div class="si-stat-label">Safe</div>
                     </div>
                 </div>
-                ${atRisk.length > 0 ? `<p style="margin-top:14px;color:var(--si-danger);font-weight:600;">⚠️ ${atRisk.map(s => s.name || s.code).join(', ')} ${atRisk.length > 1 ? 'are' : 'is'} below the required ${minPercent}%!</p>` : '<p style="margin-top:14px;">No subjects are currently below the threshold. Keep it up! 💪</p>'}
+                ${atRisk.length > 0 ? `<p style="margin-top:14px;color:var(--si-danger);font-weight:600;">${atRisk.map(s => s.name || s.code).join(', ')} ${atRisk.length > 1 ? 'are' : 'is'} below the required ${minPercent}%!</p>` : '<p style="margin-top:14px;">No subjects are currently below the threshold. Keep it up!</p>'}
                 <table class="si-subject-table">
                     <thead><tr><th>Subject</th><th class="odv-with"><span class="odv-both">With OD/ML</span><span class="odv-plain">Attendance</span></th><th class="odv-orig">Original</th><th>Present</th><th>Status</th></tr></thead>
                     <tbody>${subjectRows}</tbody>
@@ -1443,7 +1501,7 @@
         }).join('');
 
         return {
-            icon: '🏆', iconClass: 'safe',
+            icon: '', iconClass: 'safe',
             title: 'Your Strongest Subjects',
             body: `
                 <p>Here are your best-performing subjects ranked by attendance percentage. These have the most room for safe skips.</p>
@@ -1492,7 +1550,7 @@
         const overallStatus = overallPercent >= minPercent ? (overallPercent >= 85 ? 'safe' : 'info') : 'danger';
 
         return {
-            icon: overallPercent >= minPercent ? '📊' : '📉',
+            icon: overallPercent >= minPercent ? '' : '',
             iconClass: overallStatus,
             title: `Overall Attendance: ${pctPairHtml(overallPercent, overallWithout)}`,
             body: `
@@ -1532,20 +1590,25 @@
         const data = getAttendanceData();
         if (!data.length) return noDataResponse();
 
-        // Try to extract subject name from query
-        let searchTerm = query.toLowerCase()
-            .replace(/(?:about|for|show|tell|info|details?|status\s+of|attendance|subject|class|course)\s*/gi, '')
-            .trim();
-
-        const found = data.find(sub =>
-            (sub.name && sub.name.toLowerCase().includes(searchTerm)) ||
-            (sub.code && sub.code.toLowerCase().includes(searchTerm)) ||
-            (sub.shortName && sub.shortName.toLowerCase().includes(searchTerm))
-        );
+        // Whole name / code / short name in the question first ("attendance in AI")
+        let found = findSubjectsInQuery(query, data).sort((a, b) => String(b.name || '').length - String(a.name || '').length)[0];
+        if (!found) {
+            // Then the leftover words (whole words only, so "Intelligence" keeps its "tell")
+            const searchTerm = query.toLowerCase()
+                .replace(/\b(?:about|for|show|tell|me|my|what|whats|is|the|in|of|how|info|details?|status|attendance|subject|class|course|percentage|percent)\b/gi, ' ')
+                .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (searchTerm.length >= 2) {
+                found = data.find(sub =>
+                    (sub.name && sub.name.toLowerCase().includes(searchTerm)) ||
+                    (sub.code && sub.code.toLowerCase().includes(searchTerm)) ||
+                    (sub.shortName && sub.shortName.toLowerCase().includes(searchTerm))
+                );
+            }
+        }
 
         if (!found) {
-            // Fallback: try overall summary
-            return handleOverallSummary(query);
+            // Subject not recognised: overall summary, marked so the AI can find the subject instead
+            return { ...handleOverallSummary(query), _fallback: true };
         }
 
         const minCriteria = getMinCriteria();
@@ -1554,7 +1617,7 @@
         const minPercent = minCriteria * 100;
 
         return {
-            icon: status === 'safe' ? '✅' : status === 'warning' ? '⚠️' : '🔴',
+            icon: status === 'safe' ? '' : status === 'warning' ? '' : '',
             iconClass: status,
             title: `${found.name || found.code}`,
             body: `
@@ -1590,7 +1653,7 @@
                     : `You can safely miss up to <strong>${s.maxSkippable} classes</strong> and still stay above ${minPercent}%.`
                 }
                     ${s.projectedMax < minPercent
-                    ? ` <span style="color:var(--si-danger);font-weight:600;">⚠️ Even attending all remaining classes, you'll max out at ${s.projectedMax.toFixed(1)}%.</span>`
+                    ? ` <span style="color:var(--si-danger);font-weight:600;">Even attending all remaining classes, you'll max out at ${s.projectedMax.toFixed(1)}%.</span>`
                     : ''}
                 </p>
                 ${(() => {
@@ -1615,9 +1678,9 @@
 
         if (needRecovery.length === 0) {
             return {
-                icon: '🎉', iconClass: 'safe',
+                icon: '', iconClass: 'safe',
                 title: 'All Subjects on Track!',
-                body: `<p>Great news! All your subjects are already above <strong>${minPercent}%</strong>. No recovery needed. 🎊</p>`
+                body: `<p>Great news! All your subjects are already above <strong>${minPercent}%</strong>. No recovery needed.</p>`
             };
         }
 
@@ -1635,10 +1698,10 @@
         const unrecoverable = needRecovery.filter(s => s.analysis.stillNeed > s.analysis.remaining);
 
         return {
-            icon: '📋', iconClass: unrecoverable.length > 0 ? 'danger' : 'warning',
+            icon: '', iconClass: unrecoverable.length > 0 ? 'danger' : 'warning',
             title: `Recovery Plan — ${needRecovery.length} Subject${needRecovery.length > 1 ? 's' : ''} Need Attention`,
             body: `
-                ${unrecoverable.length > 0 ? `<p style="color:var(--si-danger);font-weight:600;">⚠️ ${unrecoverable.length} subject(s) cannot reach ${minPercent}% even with perfect attendance!</p>` : ''}
+                ${unrecoverable.length > 0 ? `<p style="color:var(--si-danger);font-weight:600;">${unrecoverable.length} subject(s) cannot reach ${minPercent}% even with perfect attendance!</p>` : ''}
                 <p>Here's what you need to attend to get back on track:</p>
                 <table class="si-subject-table">
                     <thead><tr><th>Subject</th><th>Current</th><th>Need to Attend</th><th>Status</th></tr></thead>
@@ -1671,13 +1734,13 @@
             return `<tr>
                 <td><strong>${sub.name || sub.code}</strong></td>
                 <td>${s.currentPercent.toFixed(1)}%</td>
-                <td>${s.stillNeed > 0 ? `${s.stillNeed} more` : '✅ Already there'}</td>
+                <td>${s.stillNeed > 0 ? `${s.stillNeed} more` : 'Already there'}</td>
                 <td><span class="si-badge ${canReach ? (s.stillNeed > 0 ? 'warning' : 'safe') : 'danger'}">${canReach ? (s.maxSkippable > 0 ? `Can skip ${s.maxSkippable}` : 'Tight') : 'Cannot reach'}</span></td>
             </tr>`;
         }).join('');
 
         return {
-            icon: '🎯', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: `Target: ${targetPercent}% Attendance`,
             body: `
                 <p>Here's what each subject needs to reach <strong>${targetPercent}%</strong>:</p>
@@ -1727,7 +1790,7 @@
         const projectedOverall = (totalHeld + totalRemaining) > 0 ? (predEff / (totalHeld + totalRemaining)) * 100 : 0;
 
         return {
-            icon: '🔮', iconClass: projectedOverall >= minPercent ? 'info' : 'danger',
+            icon: '', iconClass: projectedOverall >= minPercent ? 'info' : 'danger',
             title: `Semester End Prediction`,
             body: `
                 <div class="si-stats-grid">
@@ -1755,7 +1818,7 @@
 
     function handleHelp(query) {
         return {
-            icon: '💡', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: 'What Can You Ask?',
             body: `
                 <p>Ask anything about your attendance! Here are some examples:</p>
@@ -1806,7 +1869,7 @@
                         ['fa-list-check', 'Unmarked days', 'Days not marked yet']
                     ].map(([icon, q, label]) => `<div class="si-chip" onclick="window.SmartSearch.runQuery('${q.replace(/'/g, "\\'")}')" style="cursor:pointer;"><i class="fa-solid ${icon}"></i> "${label}"</div>`).join('')}
                 </div>
-                <p style="margin-top:12px;font-size:0.85rem;">You can also ask in Hindi or Hinglish, by typing or with the 🎤.</p>
+                <p style="margin-top:12px;font-size:0.85rem;">You can also ask in Hindi or Hinglish, by typing or with the.</p>
             `
         };
     }
@@ -1977,7 +2040,7 @@
         const t = new Date(); t.setHours(0, 0, 0, 0);
         const { ranked } = rankLeaveDays(cls, data, { exclude, to: formatLocalDateSI(addDays(t, 21)) });
         if (!ranked.length) return '<p style="margin-top:10px;"><strong>No safe single day in the next 3 weeks.</strong> Attend regularly for now to build a buffer.</p>';
-        return `<div class="si-notes" style="margin-top:12px;"><p><strong>💡 Safer days to take off instead</strong></p>${ranked.slice(0, 2).map(x => `<p><strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`;
+        return `<div class="si-notes" style="margin-top:12px;"><p><strong>Safer days to take off instead</strong></p>${ranked.slice(0, 2).map(x => `<p><strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`;
     }
 
     function handleBestLeaveDay(query) {
@@ -2008,17 +2071,17 @@
         const rows = days.slice(0, 14).map(x => `<tr>
             <td><strong>${fmtShort(x.date)}</strong>${x.len > 1 && x.safe ? `<br><small style="opacity:0.7;">${x.len}-day break</small>` : ''}</td>
             <td style="text-align:center;">${x.classes}</td>
-            <td>${x.exam ? `<span class="si-badge danger">📝 ${escapeHtml(x.exam.title)}</span>`
-                : x.safe ? `<span class="si-badge ${x.minLeft <= 1 ? 'warning' : 'safe'}">✅ Safe</span>`
-                    : `<span class="si-badge danger">❌ ${escapeHtml(x.blockers.join(', '))}</span>`}</td>
+            <td>${x.exam ? `<span class="si-badge danger">${escapeHtml(x.exam.title)}</span>`
+                : x.safe ? `<span class="si-badge ${x.minLeft <= 1 ? 'warning' : 'safe'}">Safe</span>`
+                    : `<span class="si-badge danger">${escapeHtml(x.blockers.join(', '))}</span>`}</td>
         </tr>`).join('');
 
         return {
-            icon: best ? '🗓️' : '⚠️', iconClass: best ? 'safe' : 'warning',
+            icon: best ? '' : '', iconClass: best ? 'safe' : 'warning',
             title: best ? `Best day to take leave: ${fmtShort(best.date)}` : `No safe day to take off in ${scope}`,
             body: `
-                ${best ? `<div class="si-notes"><p><strong>💡 Top picks for ${escapeHtml(scope)}</strong></p>
-                    ${ranked.slice(0, 3).map((x, i) => `<p>${['🥇', '🥈', '🥉'][i]} <strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`
+                ${best ? `<div class="si-notes"><p><strong>Top picks for ${escapeHtml(scope)}</strong></p>
+                    ${ranked.slice(0, 3).map((x, i) => `<p>${['', '', ''][i]} <strong>${fmtShort(x.date)}</strong>: ${dayReason(x)}</p>`).join('')}</div>`
                     : `<p>Every class day in ${escapeHtml(scope)} would put at least one subject below ${minPercent}% (or is an exam). Attend for now; your buffer grows with each class.</p>`}
                 ${lightest ? `<p style="margin-top:10px;">Lightest weekday: <strong>${lightest[0]}</strong> (about ${lightest[1].toFixed(1)} classes).</p>` : ''}
                 <table class="si-subject-table" style="margin-top:12px;">
@@ -2045,17 +2108,17 @@
                 const change = dayChangeFor(cls, d);
                 const exam = examOn(d);
                 let status;
-                if ((cls.holidays || []).includes(d)) status = `🏖️ <strong>Holiday</strong>${change?.reason ? ` (${escapeHtml(change.reason)})` : change?.type === 'shift' ? ` (classes moved to ${fmtShort(change.on)})` : ''}`;
+                if ((cls.holidays || []).includes(d)) status = `<strong>Holiday</strong>${change?.reason ? ` (${escapeHtml(change.reason)})` : change?.type === 'shift' ? ` (classes moved to ${fmtShort(change.on)})` : ''}`;
                 else if ((cls.portalSetup?.semesterStartDate && d < cls.portalSetup.semesterStartDate) || (cls.lastDate && d > cls.lastDate)) status = 'Outside the semester';
                 else {
                     const n = periodsOn(cls, d).filter(Boolean).length;
-                    status = n ? `📚 Class day · ${n} class${n !== 1 ? 'es' : ''}${change?.type === 'shift' && change.on === d ? ` (shifted from ${fmtShort(change.off)})` : ''}` : 'No classes (off day)';
+                    status = n ? `Class day · ${n} class${n !== 1 ? 'es' : ''}${change?.type === 'shift' && change.on === d ? ` (shifted from ${fmtShort(change.off)})` : ''}` : 'No classes (off day)';
                 }
-                return `<tr><td><strong>${fmtShort(d)}</strong></td><td>${status}${exam ? ` · <span style="color:var(--si-danger);font-weight:700;">📝 ${escapeHtml(exam.title)}</span>` : ''}</td></tr>`;
+                return `<tr><td><strong>${fmtShort(d)}</strong></td><td>${status}${exam ? ` · <span style="color:var(--si-danger);font-weight:700;">${escapeHtml(exam.title)}</span>` : ''}</td></tr>`;
             }).join('');
             const allHoliday = parsed.dates.every(d => (cls.holidays || []).includes(d));
             return {
-                icon: '🏖️', iconClass: allHoliday ? 'safe' : 'info',
+                icon: '', iconClass: allHoliday ? 'safe' : 'info',
                 title: parsed.dates.length === 1 ? (allHoliday ? `${fmtShort(parsed.dates[0])} is a holiday` : `${fmtShort(parsed.dates[0])} is not a holiday`) : `Holiday check: ${describeRanges(parsed.ranges)}`,
                 body: `<table class="si-subject-table"><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
             };
@@ -2077,7 +2140,7 @@
         (cls.dayChanges || []).filter(c => c.type === 'holiday' && c.reason).forEach(c => c.dates.forEach(d => { reasons[d] = c.reason; }));
 
         return {
-            icon: '🏖️', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: scope
                 ? `${list.length} holiday${list.length !== 1 ? 's' : ''}${scope}${upcoming.length !== list.length ? ` (${upcoming.length} upcoming)` : ''}`
                 : next ? `Next holiday: ${fmtShort(next)}${daysBetween(t, next) === 0 ? ' (today)' : daysBetween(t, next) === 1 ? ' (tomorrow)' : ` (in ${daysBetween(t, next)} days)`}` : 'No upcoming holidays',
@@ -2092,7 +2155,7 @@
                     ${ranges.slice(0, 12).map(r => `<tr><td><strong>${rangeText(r)}</strong></td><td>${escapeHtml(reasons[r.from] || '')}</td></tr>`).join('')}
                 </tbody></table>${ranges.length > 12 ? `<p>…and ${ranges.length - 12} more.</p>` : ''}` : `<p style="margin-top:14px;">No upcoming holidays${scope} in your class.</p>`}
                 ${shifts.length ? `<p style="margin-top:12px;"><strong>Shifted days:</strong> ${shifts.map(c => `${fmtShort(c.off)} → classes on ${fmtShort(c.on)}`).join(', ')}</p>` : ''}
-                <p style="margin-top:12px;font-size:0.85rem;">Add a sudden holiday or a shifted day from <strong>Attendance → Period-wise → Day changes</strong>.</p>`
+                <p style="margin-top:12px;font-size:0.85rem;">Add a sudden holiday, a shifted day or a weekend working day from <strong>Attendance → Period-wise → Day changes</strong>.</p>`
         };
     }
 
@@ -2152,7 +2215,7 @@
         const label = onlyMedical ? 'Medical leave' : onlyOd ? 'OD (duty leave)' : 'OD / Medical leave';
 
         return {
-            icon: '🏥', iconClass: rows.some(r => r.split && r.split.belowBand && r.split.odml) ? 'danger' : 'info',
+            icon: '', iconClass: rows.some(r => r.split && r.split.belowBand && r.split.odml) ? 'danger' : 'info',
             title: `${label}: ${onlyMedical ? mlCount : onlyOd ? odCount : odCount + mlCount} hour${(onlyMedical ? mlCount : onlyOd ? odCount : odCount + mlCount) !== 1 ? 's' : ''} marked`,
             body: `
                 <div class="si-stats-grid">
@@ -2186,7 +2249,7 @@
             return n === 1 ? 'tomorrow' : `in ${n} days`;
         };
         return {
-            icon: '📝', iconClass: next && daysBetween(t, next.from) <= 3 ? 'warning' : 'info',
+            icon: '', iconClass: next && daysBetween(t, next.from) <= 3 ? 'warning' : 'info',
             title: next ? `Next exam: ${next.title || 'Exam'} (${when(next)})` : 'No upcoming exams',
             body: `
                 ${upcoming.length ? `<table class="si-subject-table"><thead><tr><th>Exam</th><th>Dates</th><th>When</th></tr></thead><tbody>
@@ -2211,15 +2274,15 @@
             const periods = periodsOn(cls, d);
             const exam = examOn(d);
             const change = dayChangeFor(cls, d);
-            const head = `<p style="margin:12px 0 6px;"><strong>${fmtLong(d)}</strong>${exam ? ` · <span style="color:var(--si-danger);font-weight:700;">📝 ${escapeHtml(exam.title)}</span>` : ''}${change?.type === 'shift' && change.on === d ? ` · shifted from ${fmtShort(change.off)}` : ''}</p>`;
-            if ((cls.holidays || []).includes(d)) return head + `<p>🏖️ Holiday${change?.reason ? ` (${escapeHtml(change.reason)})` : ''}: no classes.</p>`;
+            const head = `<p style="margin:12px 0 6px;"><strong>${fmtLong(d)}</strong>${exam ? ` · <span style="color:var(--si-danger);font-weight:700;">${escapeHtml(exam.title)}</span>` : ''}${change?.type === 'shift' && change.on === d ? ` · shifted from ${fmtShort(change.off)}` : ''}</p>`;
+            if ((cls.holidays || []).includes(d)) return head + `<p>Holiday${change?.reason ? ` (${escapeHtml(change.reason)})` : ''}: no classes.</p>`;
             if ((cls.portalSetup?.semesterStartDate && d < cls.portalSetup.semesterStartDate) || (cls.lastDate && d > cls.lastDate)) return head + '<p>Outside the semester.</p>';
             if (!periods.some(Boolean)) return head + '<p>No classes.</p>';
             return head + `<table class="si-subject-table"><tbody>${periods.map((p, i) => `<tr><td style="width:56px;"><strong>P${i + 1}</strong></td><td>${p ? escapeHtml(p.name) : '<em>Free</em>'}</td></tr>`).join('')}</tbody></table>`;
         }).join('');
         const total = dates.reduce((n, d) => n + ((cls.holidays || []).includes(d) ? 0 : periodsOn(cls, d).filter(Boolean).length), 0);
         return {
-            icon: '🗓️', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: dates.length === 1 ? `${dates[0] === t ? 'Today' : dates[0] === shiftDays(t, 1) ? 'Tomorrow' : fmtShort(dates[0])}: ${total} class${total !== 1 ? 'es' : ''}` : `Timetable: ${total} classes in ${dates.length} days`,
             body: blocks
         };
@@ -2239,7 +2302,7 @@
         try { notif = JSON.parse(localStorage.getItem(`notificationSettings_${cName}`) || 'null'); } catch (e) { /* none */ }
         const modeLabels = { monthly: 'Changes every month', daily: 'Changes every day', fixed: 'Fixed timetable' };
         return {
-            icon: '👤', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: name !== 'Not set' ? name : 'Your profile',
             body: `
                 <table class="si-subject-table"><tbody>
@@ -2291,7 +2354,7 @@
         const holidaysLeft = (cls.holidays || []).filter(d => d > t && (!end || d <= end)).length;
         const done = start && end ? Math.min(100, Math.max(0, (daysBetween(start, t) / Math.max(1, daysBetween(start, end))) * 100)) : null;
         return {
-            icon: '📆', iconClass: 'info',
+            icon: '', iconClass: 'info',
             title: end ? `Semester ends ${fmtShort(end)}${daysLeft !== null ? ` · ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left` : ''}` : 'Semester end date not set',
             body: `
                 ${done !== null ? `<div class="si-progress-bar"><div class="si-progress-fill info" style="width:${done}%"></div></div><p style="margin-top:6px;font-size:0.85rem;">${done.toFixed(0)}% of the semester done</p>` : ''}
@@ -2311,14 +2374,14 @@
         if (!cls) return noClassResponse();
         const missed = window.NotificationCenter?._missedDays ? NotificationCenter._missedDays() : [];
         return {
-            icon: missed.length ? '📋' : '✅', iconClass: missed.length ? 'warning' : 'safe',
+            icon: missed.length ? '' : '', iconClass: missed.length ? 'warning' : 'safe',
             title: missed.length ? `${missed.length} class day${missed.length !== 1 ? 's' : ''} not marked` : 'Every class day is marked',
             body: missed.length ? `
                 <table class="si-subject-table"><thead><tr><th>Date</th><th>Classes</th></tr></thead><tbody>
                     ${missed.slice(0, 12).map(m => `<tr><td><strong>${fmtShort(m.date)}</strong></td><td>${m.classes}</td></tr>`).join('')}
                 </tbody></table>
                 ${missed.length > 12 ? `<p>…and ${missed.length - 12} more.</p>` : ''}
-                <p style="margin-top:12px;">Mark them quickly from the <strong>🔔 bell</strong> on Home (✅ All present / ❌ All absent per day) or the <strong>calendar</strong>.</p>`
+                <p style="margin-top:12px;">Mark them quickly from the <strong>bell</strong> on Home (All present / All absent per day) or the <strong>calendar</strong>.</p>`
                 : '<p>Nothing pending. Your attendance numbers are up to date.</p>'
         };
     }
@@ -2326,6 +2389,11 @@
     function processQuery(query) {
         query = normalizeIndic(query.trim());
         if (!query) return null;
+
+        // "How many days of leave can I take?" (also "kitne din ki chutti")
+        if (LEAVE_DAYS_RE.test(query) && !/\b\d{1,2}\s*(?:st|nd|rd|th)?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(query)) {
+            return handleLeaveDays(query);
+        }
 
         // Date-based leave questions ("take a break from 3 oct to 5 oct") come first.
         // Plain "can I skip today?" keeps its dedicated handler.
@@ -2487,6 +2555,7 @@
                 <div class="si-answer-header">
                     <div class="si-answer-icon ${iconClass}"><i class="fa-solid ${STATUS_ICONS[iconClass]}"></i></div>
                     <div class="si-answer-title">${title}</div>
+                    <span class="si-tone-pill ${iconClass}">${{ safe: 'Safe', warning: 'Careful', danger: 'At risk', info: 'Answer', neutral: 'Info' }[iconClass]}</span>
                 </div>
                 <div class="si-answer-body">${polishBody(result.body || '')}</div>
                 <div class="si-answer-footer">
@@ -2557,7 +2626,7 @@
         updateLangButton();
         const input = document.getElementById('siSearchInput');
         if (input && !listening) {
-            input.placeholder = voiceLang === 'hi-IN' ? 'Hindi voice on: 🎤 दबाएं और बोलें' : 'Ask anything…';
+            input.placeholder = voiceLang === 'hi-IN' ? 'Hindi voice on: दबाएं और बोलें' : 'Ask anything…';
             setTimeout(() => { if (!listening) input.placeholder = 'Ask anything…'; }, 3000);
         }
     }
@@ -2689,14 +2758,11 @@
             { q: 'How many classes can I skip?', icon: 'fa-shield-halved', tone: 'green', title: 'Safe skips', sub: 'How many you can still miss' },
             { q: 'Which subjects are at risk?', icon: 'fa-triangle-exclamation', tone: 'amber', title: 'At-risk subjects', sub: 'Where you are close to the limit' }
         ];
-        let recent = [];
-        try { recent = getSearchHistory().slice(0, 4); } catch (e) { recent = []; }
-        const more = document.querySelector('#smartSearchPage .si-suggestions');
         thread.innerHTML = `
             <div class="si-chat-empty si-welcome">
-                <div class="si-welcome-badge"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="si-orb" aria-hidden="true"><span></span><i class="fa-solid fa-wand-magic-sparkles"></i></div>
                 <h2 class="si-welcome-title">${greet}${first ? `, <span>${escapeHtml(first)}</span>` : ''}</h2>
-                <p class="si-welcome-sub">${cls ? `Ask anything about <strong>${escapeHtml(cls.name || 'your class')}</strong> — leaves, skips, subjects or exam days.` : 'Add a class, then ask anything about your attendance.'}</p>
+                <p class="si-welcome-sub">${cls ? `Ask anything about <strong>${escapeHtml(cls.name || 'your class')}</strong> in any language — leaves, skips, subjects, timings or exam days.` : 'Add a class, then ask anything about your attendance.'}</p>
                 <div class="si-welcome-cards">
                     ${cards.map(c => `
                     <button type="button" class="si-welcome-card" onclick="SmartSearch.runQuery(${escapeHtml(JSON.stringify(c.q))})">
@@ -2705,15 +2771,66 @@
                         <span class="si-wc-sub">${c.sub}</span>
                     </button>`).join('')}
                 </div>
-                ${recent.length ? `
-                <div class="si-welcome-section">
-                    <div class="si-welcome-label"><i class="fa-solid fa-clock-rotate-left"></i> Recent</div>
-                    <div class="si-welcome-chips">${recent.map(r => `<button type="button" class="si-chip" onclick="SmartSearch.runQuery(${escapeHtml(JSON.stringify(r))})">${escapeHtml(r)}</button>`).join('')}</div>
-                </div>` : ''}
-                ${more ? `<div class="si-welcome-more">${more.innerHTML}</div>` : ''}
-                <p class="si-welcome-foot"><i class="fa-solid fa-lock"></i> Runs on your device · your data never leaves your phone</p>
+                <p class="si-welcome-foot"><i class="fa-solid fa-calculator"></i> Numbers are calculated from your class data · type in English, हिंदी, தமிழ், తెలుగు, বাংলা, اردو…</p>
             </div>`;
         updateNewChatBtn();
+    }
+
+    // ---------- side panel: language examples, recent questions, question groups ----------
+    const LANG_EXAMPLES = ['How many days of leave can I take?', 'kitne din ki chutti le sakta hu', 'कल छुट्टी ले सकता हूँ?', 'நாளை லீவு எடுக்கலாமா?', 'আমার উপস্থিতি কত?'];
+
+    function drawerChip(q, label, icon) {
+        return `<button type="button" class="si-dr-item" onclick="SmartSearch.drawerAsk(${escapeHtml(JSON.stringify(q))})">${icon ? `<i class="fa-solid ${icon}"></i>` : ''}<span>${escapeHtml(label || q)}</span></button>`;
+    }
+
+    function renderDrawer() {
+        const el = document.getElementById('siDrawer');
+        if (!el) return;
+        let recent = [];
+        try { recent = getSearchHistory().slice(0, 8); } catch (e) { recent = []; }
+        // Question groups (Plan a leave / Check status / Your data) from the page's hidden suggestions
+        const groups = [...document.querySelectorAll('#smartSearchPage .si-suggestions .si-group')].map(g => {
+            const title = g.querySelector('.si-group-title')?.innerHTML || '';
+            const items = [...g.querySelectorAll('.si-chip')].map(c => {
+                const m = (c.getAttribute('onclick') || '').match(/runQuery\((['"])(.*?)\1\)/);
+                const icon = (c.querySelector('i')?.className || '').split(' ').find(x => x.startsWith('fa-') && x !== 'fa-solid');
+                return m ? drawerChip(m[2], c.textContent.trim(), icon) : '';
+            }).join('');
+            return items ? `<section class="si-dr-sec"><h4>${title}</h4>${items}</section>` : '';
+        }).join('');
+        el.querySelector('.si-dr-body').innerHTML = `
+            <button type="button" class="si-dr-new" onclick="SmartSearch.newChat(); SmartSearch.closeDrawer()"><i class="fa-solid fa-pen-to-square"></i> New chat</button>
+            <section class="si-dr-sec"><h4><i class="fa-solid fa-language"></i> Ask in any language</h4>${LANG_EXAMPLES.map(q => drawerChip(q, q, 'fa-comment')).join('')}</section>
+            <section class="si-dr-sec"><h4><i class="fa-solid fa-clock-rotate-left"></i> Recent${recent.length ? `<button type="button" class="si-dr-clear" onclick="SmartSearch.clearHistory(); SmartSearch.openDrawer()">Clear</button>` : ''}</h4>
+                ${recent.length ? recent.map(q => drawerChip(q, q, 'fa-magnifying-glass')).join('') : '<p class="si-dr-empty">Your questions will show here.</p>'}</section>
+            ${groups}`;
+    }
+
+    function openDrawer() {
+        let el = document.getElementById('siDrawer');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'siDrawer';
+            el.className = 'si-drawer';
+            el.innerHTML = `<div class="si-dr-backdrop" onclick="SmartSearch.closeDrawer()"></div>
+                <aside class="si-dr-panel" role="dialog" aria-label="Questions and history">
+                    <div class="si-dr-head"><span><i class="fa-solid fa-wand-magic-sparkles"></i> Smart Search</span><button type="button" onclick="SmartSearch.closeDrawer()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+                    <div class="si-dr-body"></div>
+                </aside>`;
+            document.getElementById('smartSearchPage').appendChild(el);
+            document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+        }
+        renderDrawer();
+        requestAnimationFrame(() => el.classList.add('open'));
+    }
+
+    function closeDrawer() {
+        document.getElementById('siDrawer')?.classList.remove('open');
+    }
+
+    function drawerAsk(q) {
+        closeDrawer();
+        runQuery(q);
     }
 
     function updateNewChatBtn() {
@@ -2740,6 +2857,15 @@
 
         // Small delay for a natural chat feel
         setTimeout(() => {
+            // Other scripts (Tamil, Bengali, Urdu…): the AI understands it, the engine calculates it
+            const otherScript = /(?!\p{Script=Latin})\p{L}/u.test(query);
+            if (otherScript && window.SmartAttach && SmartAttach.smartAsk) {
+                // Offline / AI down: the built-in Hindi understanding still answers
+                let guess = null;
+                try { guess = processQuery(query); } catch (e) { guess = null; }
+                SmartAttach.smartAsk(query, thinkingEl, guess && !guess._fallback ? guess : { ...handleHelp(query) });
+                return;
+            }
             let result;
             try {
                 result = processQuery(query);
@@ -2751,12 +2877,13 @@
                     body: `<p>Something went wrong while answering this. Try rephrasing, or message us on WhatsApp and we'll help.</p>`
                 };
             }
-            // Not a built-in question: let the AI answer with your attendance as context
-            if (result && result._fallback && window.SmartAttach && SmartAttach.aiAnswer) {
-                SmartAttach.aiAnswer(query, thinkingEl, result);
+            // Not a built-in question: the AI rewrites it for the engine, or answers from the class data
+            if (result && result._fallback && window.SmartAttach && SmartAttach.smartAsk) {
+                SmartAttach.smartAsk(query, thinkingEl, result);
                 return;
             }
             renderAnswer(result, thinkingEl, query);
+
         }, 450);
     }
 
@@ -2806,6 +2933,9 @@
         initSmartSearch,
         clearHistory,
         processQuery,
+        openDrawer,
+        closeDrawer,
+        drawerAsk,
         newChat,
         copyAnswer,
         toggleVoice,
@@ -2814,6 +2944,6 @@
         normalizeIndic,
         computeClassAttendance: autoComputeAttendanceData,
         // shared with js/smart-attach.js
-        _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread }
+        _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread, periodsOn: (d) => { const c = getSelectedClassObj(); return c ? periodsOn(c, d) : []; }, examOn, dayChangeFor: (d) => { const c = getSelectedClassObj(); return c ? dayChangeFor(c, d) : null; } }
     };
 })();

@@ -124,7 +124,7 @@
             cells += `
                 <button class="${cls}" onclick="AttendanceCalendar.select('${dateStr}')" aria-label="${esc(label)}" ${dateStr === selected ? 'aria-pressed="true"' : ''}>
                     <span class="ac-num">${d}</span>
-                    ${info.exam ? '<span class="ac-mark">📝</span>' : info.keys.length && !info.outside ? `<span class="ac-count">${info.keys.length}</span>` : ''}
+                    ${info.exam ? '<span class="ac-mark"></span>' : info.keys.length && !info.outside ? `<span class="ac-count">${info.keys.length}</span>` : ''}
                 </button>`;
         }
 
@@ -151,7 +151,7 @@
                 <span><i class="ac-odml"></i>OD/ML</span>
                 <span><i class="ac-unmarked"></i>Not marked</span>
                 <span><i class="ac-holiday"></i>Holiday</span>
-                <span>📝 Exam</span>
+                <span>Exam</span>
             </div>
             ${selected ? detailHtml(name, selected, logs) : '<p class="ac-hint">Tap a day to see its classes.</p>'}`;
     }
@@ -165,7 +165,7 @@
 
         let body = '';
         if (info.outside) body = '<p class="ac-detail-note">Outside the semester.</p>';
-        else if (info.holiday) body = '<p class="ac-detail-note">🏖️ Holiday: no classes.</p>';
+        else if (info.holiday) body = '<p class="ac-detail-note">Holiday: no classes.</p>';
         else if (!info.keys.length) body = '<p class="ac-detail-note">No classes scheduled.</p>';
         else {
             const counter = {};
@@ -179,13 +179,13 @@
 
             body += dateStr <= t ? `
                 <div class="ac-actions">
-                    <button class="ac-act present" onclick="AttendanceCalendar.mark('${dateStr}', 'Attended')">✅ All Present</button>
-                    <button class="ac-act absent" onclick="AttendanceCalendar.mark('${dateStr}', 'Skipped')">❌ All Absent</button>
-                    <button class="ac-act" onclick="AttendanceCalendar.manual('${dateStr}')">✏️ Mark manually</button>
+                    <button class="ac-act present" onclick="AttendanceCalendar.mark('${dateStr}', 'Attended')">All Present</button>
+                    <button class="ac-act absent" onclick="AttendanceCalendar.mark('${dateStr}', 'Skipped')">All Absent</button>
+                    <button class="ac-act" onclick="AttendanceCalendar.manual('${dateStr}')">Mark manually</button>
                 </div>` : `
                 <div class="ac-actions">
-                    ${window.ProfileTools ? `<button class="ac-act" onclick="AttendanceCalendar.planLeave('${dateStr}')">📋 Plan OD / ML</button>` : ''}
-                    ${window.amsOpenSuddenHoliday ? `<button class="ac-act" onclick="AttendanceCalendar.holiday('${dateStr}')">🏖️ Mark holiday</button>` : ''}
+                    ${window.ProfileTools ? `<button class="ac-act" onclick="AttendanceCalendar.planLeave('${dateStr}')">Plan OD / ML</button>` : ''}
+                    ${window.amsOpenSuddenHoliday ? `<button class="ac-act" onclick="AttendanceCalendar.holiday('${dateStr}')">Mark holiday</button>` : ''}
                 </div>`;
         }
 
@@ -193,7 +193,7 @@
             <div class="ac-detail">
                 <div class="ac-detail-head">
                     <strong>${title}</strong>
-                    ${info.exam ? `<span class="ac-exam-badge">📝 ${esc(info.exam.title)}</span>` : ''}
+                    ${info.exam ? `<span class="ac-exam-badge">${esc(info.exam.title)}</span>` : ''}
                 </div>
                 ${body}
             </div>`;

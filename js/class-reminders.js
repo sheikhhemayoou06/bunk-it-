@@ -92,7 +92,7 @@
         closeCard(key);
         if (typeof showToast === 'function') {
             const name = classes[className()]?.subjects.find(s => s.code === key.split('_p')[0])?.name || key;
-            showToast(status === 'Attended' ? '✅ Marked present' : '❌ Marked absent', `${name} · attendance updated`, { duration: 3000 });
+            showToast(status === 'Attended' ? 'Marked present' : 'Marked absent', `${name} · attendance updated`, { duration: 3000 });
         }
     }
 
@@ -151,13 +151,13 @@
                 tag: `class-check-${c.date}-${c.key}`,
                 renotify: false,
                 actions: [
-                    { action: 'present', title: '✅ Present' },
-                    { action: 'absent', title: '❌ Absent' }
+                    { action: 'present', title: 'Present' },
+                    { action: 'absent', title: 'Absent' }
                 ],
                 data: { kind: 'class-check', date: c.date, key: c.key, className: name, url: '/' }
             };
             if (when && typeof TimestampTrigger !== 'undefined') opts.showTrigger = new TimestampTrigger(when);
-            await reg.showNotification(`🔔 ${c.name} just ended`, opts);
+            await reg.showNotification(`${c.name} just ended`, opts);
             return true;
         } catch (e) { return false; }
     }
@@ -193,7 +193,7 @@
             if (nowMin - c.endMin > LATE_LIMIT_MIN) return;
             if (done.has(c.key)) { if (visible) showCard(c); return; }
             remember(c.date, c.key);
-            if (window.NotificationCenter) NotificationCenter.log({ icon: '🔔', title: `${c.name} just ended`, body: `${c.start && c.end ? `${fmt12(c.start)} – ${fmt12(c.end)} · ` : ''}Mark your attendance` });
+            if (window.NotificationCenter) NotificationCenter.log({ icon: '', title: `${c.name} just ended`, body: `${c.start && c.end ? `${fmt12(c.start)} – ${fmt12(c.end)} · ` : ''}Mark your attendance` });
             if (visible) showCard(c);
             else if (typeof TimestampTrigger === 'undefined') systemNotify(c, name);
         });

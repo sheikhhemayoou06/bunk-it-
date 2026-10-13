@@ -1416,6 +1416,7 @@ body.dark-mode .dc-modal {
 }
 
 .dc-dates input,
+.dc-dates select,
 .dc-reason input {
     width: 100%;
     min-width: 0;
@@ -1622,3 +1623,127 @@ body.dark-mode .dc-warn {
 .pg-row-exam td:first-child {
     box-shadow: inset 3px 0 0 #ef4444;
 }
+
+/* ============================================================
+   AURORA DESIGN for the Attendance portal (matches Smart Search)
+   ============================================================ */
+#studentPortalPage {
+    --au-1: #6366f1; --au-2: #8b5cf6; --au-3: #ec4899;
+    --au-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
+    --au-card: var(--card-bg, #fff);
+    --au-line: var(--border-color, #e5e9f0);
+    --au-text: var(--dark-text, #1a1f36);
+    --au-muted: var(--medium-text, #64748b);
+    --au-shadow: 0 18px 40px -28px rgba(15, 23, 42, .5);
+    background:
+        radial-gradient(700px 380px at 8% -60px, rgba(99, 102, 241, .14), transparent 70%),
+        radial-gradient(600px 340px at 96% 0, rgba(236, 72, 153, .09), transparent 70%),
+        var(--light-bg, #f8fafc);
+    min-height: 100vh;
+}
+body.dark-mode #studentPortalPage {
+    background:
+        radial-gradient(700px 380px at 8% -60px, rgba(99, 102, 241, .26), transparent 70%),
+        radial-gradient(600px 340px at 96% 0, rgba(236, 72, 153, .14), transparent 70%),
+        var(--light-bg, #0f172a);
+}
+#studentPortalPage .ams-container { max-width: 980px; margin: 0 auto; }
+
+/* Back buttons: glass pills */
+#studentPortalPage .ams-back-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--au-line); background: color-mix(in srgb, var(--au-card) 80%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); color: var(--au-text); font-weight: 700; box-shadow: 0 8px 20px -14px rgba(79, 70, 229, .5); transition: transform .15s, color .15s; }
+#studentPortalPage .ams-back-btn:hover { transform: translateX(-2px); color: var(--au-1); }
+
+/* Page titles: gradient text */
+#studentPortalPage .ams-page-header h2,
+#studentPortalPage .ams-page-header h1,
+#studentPortalPage .ams-header-left h2 { background: var(--au-grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800; letter-spacing: -0.4px; }
+
+/* Menu: hero + gradient cards */
+#studentPortalPage .ams-menu-content { border-radius: 26px; border: 1px solid var(--au-line); background: var(--au-card); box-shadow: var(--au-shadow); overflow: hidden; }
+#studentPortalPage .ams-menu-title { position: relative; padding: 22px 20px; background: linear-gradient(135deg, color-mix(in srgb, #6366f1 12%, var(--au-card)), color-mix(in srgb, #ec4899 8%, var(--au-card))); border-bottom: 1px solid var(--au-line); }
+#studentPortalPage .ams-menu-title h2 { background: var(--au-grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800; font-size: 1.6rem; letter-spacing: -0.5px; }
+#studentPortalPage .ams-menu-icon-box { border-radius: 18px; background: var(--au-grad) !important; box-shadow: 0 12px 24px -12px rgba(139, 92, 246, .9); }
+#studentPortalPage .ams-menu-icon-box i { color: #fff !important; }
+#studentPortalPage .ams-menu-list { gap: 12px; padding: 16px; }
+#studentPortalPage .ams-menu-card { position: relative; border: 1px solid var(--au-line) !important; border-left-width: 1px !important; border-radius: 20px; background: var(--au-card); box-shadow: 0 10px 26px -22px rgba(15, 23, 42, .6); transition: transform .18s, box-shadow .18s, border-color .18s; overflow: hidden; }
+#studentPortalPage .ams-menu-card::before { display: none !important; }
+#studentPortalPage .ams-menu-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--au-2) 45%, transparent) !important; box-shadow: 0 18px 34px -20px rgba(99, 102, 241, .55); }
+#studentPortalPage .ams-card-icon { width: 46px; height: 46px; border-radius: 15px !important; color: #fff !important; box-shadow: 0 10px 18px -10px rgba(15, 23, 42, .5); }
+#studentPortalPage .ams-menu-card:nth-child(1) .ams-card-icon { background: linear-gradient(135deg, #3b82f6, #06b6d4) !important; }
+#studentPortalPage .ams-menu-card:nth-child(2) .ams-card-icon { background: linear-gradient(135deg, #8b5cf6, #ec4899) !important; }
+#studentPortalPage .ams-menu-card:nth-child(3) .ams-card-icon { background: linear-gradient(135deg, #10b981, #22c55e) !important; }
+#studentPortalPage .ams-menu-card:nth-child(4) .ams-card-icon { background: linear-gradient(135deg, #f59e0b, #f97316) !important; }
+#studentPortalPage .ams-menu-card:nth-child(1) { background: radial-gradient(140px 90px at 100% 0, color-mix(in srgb, #06b6d4 12%, transparent), transparent 70%), var(--au-card); }
+#studentPortalPage .ams-menu-card:nth-child(2) { background: radial-gradient(140px 90px at 100% 0, color-mix(in srgb, #ec4899 11%, transparent), transparent 70%), var(--au-card); }
+#studentPortalPage .ams-menu-card:nth-child(3) { background: radial-gradient(140px 90px at 100% 0, color-mix(in srgb, #10b981 12%, transparent), transparent 70%), var(--au-card); }
+#studentPortalPage .ams-menu-card:nth-child(4) { background: radial-gradient(140px 90px at 100% 0, color-mix(in srgb, #f59e0b 13%, transparent), transparent 70%), var(--au-card); }
+#studentPortalPage .ams-card-text h3 { font-weight: 800; }
+#studentPortalPage .ams-card-arrow { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--au-1) 8%, transparent); color: var(--au-1); }
+
+/* Stat cards: soft tinted tiles */
+#studentPortalPage .ams-stat-card { border-radius: 20px; border: 1px solid var(--au-line); box-shadow: var(--au-shadow); overflow: hidden; }
+#studentPortalPage .ams-stat-card::before { height: 3px; }
+#studentPortalPage .ams-stat-card.overall { background: linear-gradient(160deg, color-mix(in srgb, #6366f1 11%, var(--au-card)), var(--au-card)); }
+#studentPortalPage .ams-stat-card.present { background: linear-gradient(160deg, color-mix(in srgb, #10b981 12%, var(--au-card)), var(--au-card)); }
+#studentPortalPage .ams-stat-card.absent { background: linear-gradient(160deg, color-mix(in srgb, #ef4444 11%, var(--au-card)), var(--au-card)); }
+#studentPortalPage .ams-stat-card.total { background: linear-gradient(160deg, color-mix(in srgb, #f59e0b 12%, var(--au-card)), var(--au-card)); }
+#studentPortalPage .ams-stat-value { font-weight: 800; letter-spacing: -0.5px; }
+#studentPortalPage .ams-stat-icon { border-radius: 14px; }
+#studentPortalPage .ams-threshold-card { border-radius: 20px; border: 1px solid var(--au-line); box-shadow: var(--au-shadow); background: var(--au-card); }
+#studentPortalPage .ams-threshold-icon { border-radius: 16px; }
+
+/* Sections and tables */
+#studentPortalPage .ams-subject-summary,
+#studentPortalPage .ams-records-section,
+#studentPortalPage .ams-mark-section,
+#studentPortalPage .ams-filter-section { border-radius: 22px; border: 1px solid var(--au-line); background: var(--au-card); box-shadow: var(--au-shadow); overflow: hidden; }
+#studentPortalPage .ams-subject-summary-header,
+#studentPortalPage .ams-records-header { background: linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--au-card)), color-mix(in srgb, #ec4899 5%, var(--au-card))); border-bottom: 1px solid var(--au-line); }
+#studentPortalPage .ams-subject-summary-header h3,
+#studentPortalPage .ams-records-header h3 { font-weight: 800; }
+#studentPortalPage .ams-summary-table th,
+#studentPortalPage .ams-records-table th { background: color-mix(in srgb, var(--au-1) 6%, var(--au-card)); color: var(--au-muted); font-size: .72rem; letter-spacing: .5px; text-transform: uppercase; }
+#studentPortalPage .ams-summary-table tbody tr:nth-child(even) td,
+#studentPortalPage .ams-records-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--au-text) 2.5%, transparent); }
+#studentPortalPage .ams-summary-table tbody tr:hover td,
+#studentPortalPage .ams-records-table tbody tr:hover td { background: color-mix(in srgb, var(--au-1) 6%, transparent); }
+#studentPortalPage .ams-status-badge { border-radius: 999px; font-weight: 700; }
+
+/* Filters, selects, buttons */
+#studentPortalPage .ams-filter-toggle,
+#studentPortalPage .ams-page-btn { border-radius: 12px; border: 1px solid var(--au-line); background: var(--au-card); color: var(--au-text); font-weight: 600; }
+#studentPortalPage .ams-filter-toggle:hover,
+#studentPortalPage .ams-page-btn:hover:not(:disabled) { border-color: var(--au-1); color: var(--au-1); }
+#studentPortalPage select, #studentPortalPage input[type="date"], #studentPortalPage input[type="text"], #studentPortalPage input[type="month"] { border-radius: 12px; }
+#studentPortalPage .ams-save-btn { border: none; border-radius: 14px; background: var(--au-grad); color: #fff; font-weight: 700; box-shadow: 0 10px 22px -12px rgba(139, 92, 246, .9); }
+
+/* Period-wise: legend, bulk actions, grid */
+#studentPortalPage .pg-legend { gap: 8px; }
+#studentPortalPage .pg-leg-item { border-radius: 999px; padding: 5px 12px; border: 1px solid var(--au-line); background: var(--au-card); font-weight: 600; }
+#studentPortalPage .pg-bulk-actions { border-radius: 22px !important; border: 1px solid var(--au-line); background: var(--au-card) !important; box-shadow: var(--au-shadow); }
+#studentPortalPage .pg-bulk-actions button { border-radius: 999px !important; border: 1px solid var(--au-line) !important; background: var(--au-card) !important; color: var(--au-text) !important; font-weight: 700; transition: border-color .15s, transform .15s, background .15s; }
+#studentPortalPage .pg-bulk-actions button:hover { border-color: var(--au-1) !important; background: color-mix(in srgb, var(--au-1) 7%, var(--au-card)) !important; transform: translateY(-1px); }
+#studentPortalPage .pg-bulk-title, #studentPortalPage .pg-bulk-divider { color: var(--au-muted) !important; letter-spacing: .5px; }
+#studentPortalPage .pg-table-wrapper { border-radius: 22px !important; border: 1px solid var(--au-line) !important; box-shadow: var(--au-shadow) !important; background: var(--au-card) !important; }
+#studentPortalPage .pg-table thead th { background: color-mix(in srgb, var(--au-1) 7%, var(--au-card)) !important; border-bottom: none !important; box-shadow: 0 -4px 0 4px var(--au-card), 0 6px 0 0 var(--au-card); }
+#studentPortalPage .pg-table td.pg-cell { border-radius: 12px; transition: transform .12s; }
+#studentPortalPage .pg-table td.pg-cell:not(.pg-empty):hover { transform: scale(1.06); }
+#studentPortalPage .pg-table tr.pg-row-today td.pg-date-cell { background: var(--au-grad) !important; color: #fff; border-radius: 12px; }
+#studentPortalPage .pg-month { background: linear-gradient(135deg, color-mix(in srgb, #6366f1 14%, var(--au-card)), color-mix(in srgb, #ec4899 10%, var(--au-card))); border: 1px solid color-mix(in srgb, var(--au-2) 25%, transparent); }
+#studentPortalPage .pg-month strong { background: var(--au-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Empty states */
+#studentPortalPage .ams-empty-state { border-radius: 22px; border: 1px dashed var(--au-line); background: var(--au-card); }
+/* Bulk action chips keep a coloured dot on every screen size */
+#studentPortalPage .pg-bulk-actions button { display: flex; align-items: center; gap: 8px; }
+#studentPortalPage .pg-bulk-actions button::before { content: ''; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--au-1); }
+#studentPortalPage .pg-bulk-actions .pg-btn-present::before { background: #22c55e; }
+#studentPortalPage .pg-bulk-actions .pg-btn-absent::before { background: #ef4444; }
+#studentPortalPage .pg-bulk-actions .pg-btn-cancelled::before { background: #9ca3af; }
+#studentPortalPage .pg-bulk-actions .pg-btn-duty::before { background: #3b82f6; }
+#studentPortalPage .pg-bulk-actions .pg-btn-medical::before { background: #f59e0b; }
+#studentPortalPage .pg-bulk-actions .pg-btn-reset::before { background: transparent; border: 1.5px solid var(--au-muted); box-sizing: border-box; }
+#studentPortalPage .pg-bulk-actions .pg-btn-shift::before { background: #7c3aed; }
+#studentPortalPage .pg-bulk-actions .pg-btn-holiday::before { background: #0d9488; }
+#studentPortalPage .pg-bulk-actions .pg-btn-extra::before { background: #db2777; }
+#studentPortalPage .pg-table tr.pg-month-row td { text-align: left; }

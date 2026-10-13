@@ -538,7 +538,7 @@ const SyncManager = {
         if (!confirm("Force Global Sync?\n\nThis will re-upload ALL your local data to the cloud, ensuring everything is saved.\n\nContinue?")) return;
         this.syncing = false; // Reset lock
         await this.uploadAll();
-        alert("✅ Forced Sync Complete!\nYour local data is now on the cloud.");
+        alert("Forced Sync Complete!\nYour local data is now on the cloud.");
         window.location.reload();
     },
 
@@ -1013,7 +1013,7 @@ const SyncManager = {
 
     updateSyncStatus(msg) {
         const el = document.getElementById('sidebarSyncStatus');
-        if (el) el.textContent = `☁️ ${msg}`;
+        if (el) el.textContent = `${msg}`;
     },
 
     // Clear Service Worker cache to prevent stale HTML issues

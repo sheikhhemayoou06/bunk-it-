@@ -11,12 +11,12 @@
 
     // --- Constants ---
     const STATUS_MAP = {
-        'Attended': { label: '✅ Present', css: 'present', icon: '✅' },
-        'Skipped': { label: '❌ Absent', css: 'absent', icon: '❌' },
-        'Cancelled': { label: '🔘 Cancelled', css: 'cancelled', icon: '🔘' },
-        'Medical Leave (ML)': { label: '🏥 Medical Leave', css: 'medical', icon: '🏥' },
-        'Duty Leave (OD)': { label: '📋 Duty Leave', css: 'duty-leave', icon: '📋' },
-        'Default': { label: '⬜ Not Marked', css: 'not-marked', icon: '⬜' }
+        'Attended': { label: 'Present', css: 'present', icon: '' },
+        'Skipped': { label: 'Absent', css: 'absent', icon: '' },
+        'Cancelled': { label: 'Cancelled', css: 'cancelled', icon: '' },
+        'Medical Leave (ML)': { label: 'Medical Leave', css: 'medical', icon: '' },
+        'Duty Leave (OD)': { label: 'Duty Leave', css: 'duty-leave', icon: '' },
+        'Default': { label: 'Not Marked', css: 'not-marked', icon: '' }
     };
 
     const SUBJECT_COLORS = [
@@ -36,7 +36,8 @@
     let amsSelectedSubject = null;
     let amsFilterOpen = false;
     let amsCurrentPage = 1;
-    let amsScrollToDate = null;   // Period-wise: row to scroll to (from Cumulative "Open day")
+    let amsScrollToDate = null;
+    let amsLastView = null;       // view drawn last time (same view again = keep scroll)   // Period-wise: row to scroll to (from Cumulative "Open day")
     let amsCumDetail = null;      // Cumulative: { month, status } being inspected
     let amsFilters = { subject: '', date: '', dateFrom: '', dateTo: '', month: '', classType: '', status: '' };
 
@@ -167,6 +168,12 @@
             return keepFree ? trimTrailingFree(periods) : periods.filter(Boolean);
         }
 
+        return timetablePeriods(sc, className, dateStr, dayIndex, keepFree);
+    }
+
+    // The timetable of weekday dayIndex (0 = Mon) as it stood on dateStr,
+    // ignoring holidays and custom schedules for that date
+    function timetablePeriods(sc, className, dateStr, dayIndex, keepFree = false) {
         // Use timetable arrangement
         if (typeof getTimetableArrangement === 'function') {
             const arrangement = getTimetableArrangement(className, dateStr) || {};
@@ -474,13 +481,24 @@
             container.innerHTML = `
                 <div class="ams-container ams-animate-in">
                     <div class="ams-empty-state" style="padding: 60px 20px;">
-                        <div class="ams-empty-icon">📚</div>
+                        <div class="ams-empty-icon"><i class="fa-solid fa-graduation-cap"></i></div>
                         <h4>No Class Selected</h4>
                         <p>Please select a class from the Home tab to start tracking attendance.</p>
                     </div>
                 </div>`;
             return;
         }
+
+        // Re-drawing the same Period-wise grid (after marking a class): stay exactly where you were
+        const keepScroll = amsCurrentView === 'period_wise' && amsLastView === 'period_wise' && !amsScrollToDate;
+        const oldWrap = container.querySelector('.pg-table-wrapper');
+        const scrollers = [document.scrollingElement, document.getElementById('studentPortalPage'), container.closest('.page-view')].filter(Boolean);
+        const saved = keepScroll ? {
+            page: scrollers.map(el => el.scrollTop),
+            top: oldWrap ? oldWrap.scrollTop : 0,
+            left: oldWrap ? oldWrap.scrollLeft : 0
+        } : null;
+        amsLastView = amsCurrentView;
 
         let content = '';
 
@@ -497,12 +515,19 @@
         }
 
         container.innerHTML = `
-            <div class="ams-container ams-animate-in">
+            <div class="ams-container ${saved ? '' : 'ams-animate-in'}">
                 ${content}
             </div>`;
 
         attachEvents();
         populateMarkAttendance();
+
+        if (saved) {
+            const wrap = container.querySelector('.pg-table-wrapper');
+            if (wrap) { wrap.scrollTop = saved.top; wrap.scrollLeft = saved.left; }
+            scrollers.forEach((el, i) => { el.scrollTop = saved.page[i]; });
+            return;
+        }
 
         // Grid runs from class start to class end; bring today's row into view
         if (amsCurrentView === 'period_wise') {
@@ -779,7 +804,7 @@
         return `
         <div class="ams-subject-summary" style="margin-top:24px;">
             <div class="ams-subject-summary-header">
-                <h4>📚 Course-wise Attendance</h4>
+                <h4>Course-wise Attendance</h4>
             </div>
             <div class="ams-table-wrapper">
                 <table class="ams-summary-table">
@@ -807,7 +832,7 @@
             <div class="ams-mark-section">
                 <div class="ams-section-header">
                     <div>
-                        <div class="ams-section-title">📅 Mark Attendance — Day-wise</div>
+                        <div class="ams-section-title">Mark Attendance — Day-wise</div>
                         <div class="ams-section-subtitle">Select a date and mark attendance for each period</div>
                     </div>
                 </div>
@@ -860,9 +885,29 @@
 
         let bodyRows = '';
         let anchorSet = false;
+        // Month summary for the separator rows: class days and marked present/absent
+        const monthInfo = {};
+        dates.forEach(dObj => {
+            const m = dObj.date.slice(0, 7);
+            const info = monthInfo[m] = monthInfo[m] || { days: 0, p: 0, a: 0 };
+            info.days++;
+            Object.values(logs[dObj.date] || {}).forEach(st => {
+                if (/^(Attended|Present|P|Duty Leave \(OD\)|OD|Medical Leave \(ML\)|ML)$/.test(st)) info.p++;
+                else if (/^(Skipped|Absent|A)$/.test(st)) info.a++;
+            });
+        });
+        let lastMonth = '';
         dates.forEach(dObj => {
             const dateStr = dObj.date;
             const dayLog = logs[dateStr] || {};
+            const month = dateStr.slice(0, 7);
+            if (month !== lastMonth) {
+                lastMonth = month;
+                const mi = monthInfo[month];
+                const marked = mi.p + mi.a;
+                const label = parseDate(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+                bodyRows += `<tr class="pg-month-row" data-month="${month}"><td colspan="${maxPeriods + 1}"><div class="pg-month"><strong>${label}</strong><span>${mi.days} class day${mi.days !== 1 ? 's' : ''}${marked ? ` · ${Math.round(mi.p / marked * 100)}% present · ${mi.p}/${marked} classes` : ' · not marked yet'}</span></div></td></tr>`;
+            }
             
             const dispDate = getDayShort(dateStr) + ' ' + parseDate(dateStr).toLocaleDateString('en-IN', { day:'2-digit', month:'short' });
             
@@ -872,7 +917,7 @@
             const exam = typeof getExamOn === 'function' ? getExamOn(dateStr) : null;
             const dayPart = getDayShort(dateStr);
             const datePart = parseDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-            let rowHtml = `<tr class="${rowClass}${exam ? ' pg-row-exam' : ''}"${rowId} data-date="${dateStr}"><td class="pg-date-cell" style="white-space:nowrap;font-weight:600;cursor:pointer;" onclick="window.amsOpenBulkDatePopup(event, '${dateStr}')" title="${exam ? `Exam: ${String(exam.title).replace(/"/g, '&quot;')} · ` : ''}Click for bulk actions on ${dispDate}"><span class="pg-dw">${dayPart}</span> <span class="pg-dd">${datePart}</span>${exam ? ' <span class="pg-exam-tag">📝 Exam</span>' : ''}</td>`;
+            let rowHtml = `<tr class="${rowClass}${exam ? ' pg-row-exam' : ''}"${rowId} data-date="${dateStr}"><td class="pg-date-cell" style="white-space:nowrap;font-weight:600;cursor:pointer;" onclick="window.amsOpenBulkDatePopup(event, '${dateStr}')" title="${exam ? `Exam: ${String(exam.title).replace(/"/g, '&quot;')} · ` : ''}Click for bulk actions on ${dispDate}"><span class="pg-dw">${dayPart}</span> <span class="pg-dd">${datePart}</span>${exam ? ' <span class="pg-exam-tag">Exam</span>' : ''}</td>`;
             
             const periodCounts = {};
             for(let i=0; i<maxPeriods; i++) {
@@ -919,6 +964,10 @@
             .ams-mark-section { min-width: 0; max-width: 100%; }
             /* Grid scrolls inside its own box; date column and period numbers stay put */
             .pg-table-wrapper { max-width: 100%; max-height: 72vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+            .pg-table tr.pg-month-row td { padding: 14px 0 6px; background: transparent; border: none; box-shadow: none; }
+            .pg-month { position: sticky; left: 0; display: inline-flex; align-items: baseline; gap: 10px; padding: 7px 14px; border-radius: 999px; background: linear-gradient(135deg, rgba(99,102,241,.14), rgba(236,72,153,.10)); }
+            .pg-month strong { font-size: 0.95rem; color: var(--dark-text); white-space: nowrap; }
+            .pg-month span { font-size: 0.76rem; font-weight: 600; color: var(--medium-text); }
             .pg-table thead th { position: sticky; top: 0; z-index: 2; }
             .pg-table th:first-child, .pg-table td.pg-date-cell { position: sticky; left: 0; z-index: 1; background: var(--card-bg); }
             .pg-table thead th:first-child { z-index: 3; background: var(--light-bg); }
@@ -944,6 +993,7 @@
             .pg-btn-reset { background: var(--light-bg); color: var(--dark-text) !important; border: 1px solid var(--border-color) !important; }
             .pg-btn-shift { background: #7c3aed; }
             .pg-btn-holiday { background: #0d9488; }
+            .pg-btn-extra { background: #db2777; }
             .pg-bulk-divider { grid-column: 1 / -1; margin: 10px 0 8px; padding-top: 10px; border-top: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 700; color: var(--medium-text); text-transform: uppercase; letter-spacing: 0.4px; }
             
             .pg-table-wrapper { flex: 1; overflow-x: auto; background: var(--card-bg); border-radius: 12px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
@@ -1036,6 +1086,7 @@
                 .pg-bulk-actions .pg-btn-reset::before { background: transparent; border: 1.5px solid var(--medium-text); box-sizing: border-box; }
                 .pg-bulk-actions .pg-btn-shift::before { background: #7c3aed; }
                 .pg-bulk-actions .pg-btn-holiday::before { background: #0d9488; }
+                .pg-bulk-actions .pg-btn-extra::before { background: #db2777; }
 
                 /* Grid: no sideways scroll for a normal day (up to 7 periods) */
                 .pg-table-wrapper { border-radius: 16px; max-height: 70vh; }
@@ -1103,12 +1154,13 @@
                     <button class="pg-btn-present" onclick="window.amsBulkPeriod('Attended')">✓ All Attended</button>
                     <button class="pg-btn-absent" onclick="window.amsBulkPeriod('Skipped')">✗ All Skipped</button>
                     <button class="pg-btn-cancelled" onclick="window.amsBulkPeriod('Cancelled')">× All Cancelled</button>
-                    <button class="pg-btn-duty" onclick="window.amsBulkPeriod('Duty Leave (OD)')">📋 All Duty Leave</button>
-                    <button class="pg-btn-medical" onclick="window.amsBulkPeriod('Medical Leave (ML)')">🏥 All Medical Leave</button>
+                    <button class="pg-btn-duty" onclick="window.amsBulkPeriod('Duty Leave (OD)')">All Duty Leave</button>
+                    <button class="pg-btn-medical" onclick="window.amsBulkPeriod('Medical Leave (ML)')">All Medical Leave</button>
                     <button class="pg-btn-reset" onclick="window.amsBulkPeriod('Default')">↻ Reset All (Default)</button>
                     <div class="pg-bulk-divider">Day changes</div>
-                    <button class="pg-btn-shift" onclick="window.amsOpenShiftDay()">🔁 Day shifted to weekend</button>
-                    <button class="pg-btn-holiday" onclick="window.amsOpenSuddenHoliday()">🏖️ Sudden holiday</button>
+                    <button class="pg-btn-shift" onclick="window.amsOpenShiftDay()">Day shifted to weekend</button>
+                    <button class="pg-btn-extra" onclick="window.amsOpenWorkingWeekend()">Weekend as working day</button>
+                    <button class="pg-btn-holiday" onclick="window.amsOpenSuddenHoliday()">Sudden holiday</button>
                 </div>
                 
                 <div class="pg-table-wrapper">
@@ -1193,7 +1245,7 @@
         return `
         <div class="ams-subject-summary" style="margin-top:24px;">
             <div class="ams-subject-summary-header">
-                <h4>📈 Cumulative Attendance</h4>
+                <h4>Cumulative Attendance</h4>
             </div>
             <p class="ams-cum-hint">Tap a number to see exactly which days and classes it comes from.</p>
             <div class="ams-table-wrapper">
@@ -1336,12 +1388,12 @@ function renderFilterSection(sc) {
                     <label>Status</label>
                     <select id="amsFilterStatus">
                         <option value="">All Statuses</option>
-                        <option value="Attended" ${amsFilters.status === 'Attended' ? 'selected' : ''}>✅ Present</option>
-                        <option value="Skipped" ${amsFilters.status === 'Skipped' ? 'selected' : ''}>❌ Absent</option>
-                        <option value="Cancelled" ${amsFilters.status === 'Cancelled' ? 'selected' : ''}>🔘 Cancelled</option>
-                        <option value="Medical Leave (ML)" ${amsFilters.status === 'Medical Leave (ML)' ? 'selected' : ''}>🏥 Medical Leave</option>
-                        <option value="Duty Leave (OD)" ${amsFilters.status === 'Duty Leave (OD)' ? 'selected' : ''}>📋 Duty Leave</option>
-                        <option value="Default" ${amsFilters.status === 'Default' ? 'selected' : ''}>⬜ Not Marked</option>
+                        <option value="Attended" ${amsFilters.status === 'Attended' ? 'selected' : ''}>Present</option>
+                        <option value="Skipped" ${amsFilters.status === 'Skipped' ? 'selected' : ''}>Absent</option>
+                        <option value="Cancelled" ${amsFilters.status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                        <option value="Medical Leave (ML)" ${amsFilters.status === 'Medical Leave (ML)' ? 'selected' : ''}>Medical Leave</option>
+                        <option value="Duty Leave (OD)" ${amsFilters.status === 'Duty Leave (OD)' ? 'selected' : ''}>Duty Leave</option>
+                        <option value="Default" ${amsFilters.status === 'Default' ? 'selected' : ''}>Not Marked</option>
                     </select>
                 </div>
                 <div class="ams-filter-actions" style="grid-column: 1 / -1;">
@@ -1361,11 +1413,11 @@ function renderFilterSection(sc) {
             return `
             <div class="ams-records-section">
                 <div class="ams-records-header">
-                    <h4>📋 Detailed Attendance Records</h4>
+                    <h4>Detailed Attendance Records</h4>
                     <span class="ams-records-count">0 records</span>
                 </div>
                 <div class="ams-empty-state">
-                    <div class="ams-empty-icon">📝</div>
+                    <div class="ams-empty-icon"><i class="fa-solid fa-folder-open"></i></div>
                     <h4>No Records Found</h4>
                     <p>Mark attendance using the section above or adjust your filters.</p>
                 </div>
@@ -1419,7 +1471,7 @@ function renderFilterSection(sc) {
         return `
         <div class="ams-records-section">
             <div class="ams-records-header">
-                <h4>📋 Detailed Attendance Records</h4>
+                <h4>Detailed Attendance Records</h4>
                 <span class="ams-records-count">${records.length} record${records.length !== 1 ? 's' : ''}</span>
             </div>
             <div class="ams-table-wrapper">
@@ -1475,11 +1527,11 @@ function renderFilterSection(sc) {
         let html = `
         <div class="ams-bulk-actions">
             <span class="ams-bulk-label">Quick Actions</span>
-            <button class="ams-bulk-btn present" onclick="window.amsBulk('Attended')">✅ All Present</button>
-            <button class="ams-bulk-btn absent" onclick="window.amsBulk('Skipped')">❌ All Absent</button>
-            <button class="ams-bulk-btn cancel" onclick="window.amsBulk('Cancelled')">🔘 All Cancelled</button>
-            <button class="ams-bulk-btn" onclick="window.amsBulk('Medical Leave (ML)')">🏥 All ML</button>
-            <button class="ams-bulk-btn" onclick="window.amsBulk('Default')">⬜ Reset All</button>
+            <button class="ams-bulk-btn present" onclick="window.amsBulk('Attended')">All Present</button>
+            <button class="ams-bulk-btn absent" onclick="window.amsBulk('Skipped')">All Absent</button>
+            <button class="ams-bulk-btn cancel" onclick="window.amsBulk('Cancelled')">All Cancelled</button>
+            <button class="ams-bulk-btn" onclick="window.amsBulk('Medical Leave (ML)')">All ML</button>
+            <button class="ams-bulk-btn" onclick="window.amsBulk('Default')">Reset All</button>
         </div>
         <div class="ams-subject-list">`;
 
@@ -1503,12 +1555,12 @@ function renderFilterSection(sc) {
                     <div class="ams-subj-code">${p.code} · Period ${p.period}</div>
                 </div>
                 <select class="ams-status-select ${statusCss}" data-key="${periodKey}" data-code="${p.code}" onchange="window.amsStatusChanged(this)">
-                    <option value="Default" ${currentStatus === 'Default' ? 'selected' : ''}>⬜ Not Marked</option>
-                    <option value="Attended" ${currentStatus === 'Attended' ? 'selected' : ''}>✅ Present</option>
-                    <option value="Skipped" ${currentStatus === 'Skipped' ? 'selected' : ''}>❌ Absent</option>
-                    <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>🔘 Cancelled</option>
-                    <option value="Medical Leave (ML)" ${currentStatus === 'Medical Leave (ML)' ? 'selected' : ''}>🏥 Medical Leave</option>
-                    <option value="Duty Leave (OD)" ${currentStatus === 'Duty Leave (OD)' ? 'selected' : ''}>📋 Duty Leave</option>
+                    <option value="Default" ${currentStatus === 'Default' ? 'selected' : ''}>Not Marked</option>
+                    <option value="Attended" ${currentStatus === 'Attended' ? 'selected' : ''}>Present</option>
+                    <option value="Skipped" ${currentStatus === 'Skipped' ? 'selected' : ''}>Absent</option>
+                    <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                    <option value="Medical Leave (ML)" ${currentStatus === 'Medical Leave (ML)' ? 'selected' : ''}>Medical Leave</option>
+                    <option value="Duty Leave (OD)" ${currentStatus === 'Duty Leave (OD)' ? 'selected' : ''}>Duty Leave</option>
                 </select>
             </div>`;
         });
@@ -1532,7 +1584,7 @@ function renderFilterSection(sc) {
         if (!container || !subjectCode) {
             if (container) container.innerHTML = `
                 <div class="ams-empty-state" style="padding:24px;">
-                    <div class="ams-empty-icon">👆</div>
+                    <div class="ams-empty-icon"><i class="fa-solid fa-hand-pointer"></i></div>
                     <h4>Select a Subject Above</h4>
                     <p>Choose a subject to see its scheduled dates and mark attendance.</p>
                 </div>`;
@@ -1568,7 +1620,7 @@ function renderFilterSection(sc) {
         if (dates.length === 0) {
             container.innerHTML = `
                 <div class="ams-empty-state" style="padding:24px;">
-                    <div class="ams-empty-icon">📭</div>
+                    <div class="ams-empty-icon"><i class="fa-solid fa-calendar-xmark"></i></div>
                     <h4>No Scheduled Dates</h4>
                     <p>This subject has no scheduled classes from the baseline to today.</p>
                 </div>`;
@@ -1609,12 +1661,12 @@ function renderFilterSection(sc) {
                         <div class="ams-subj-code">${getDayName(date)} · Period ${p.period}</div>
                     </div>
                     <select class="ams-status-select ams-cw-select ${statusCss}" data-date="${date}" data-key="${periodKey}" data-code="${p.code}" onchange="window.amsCwStatusChanged(this)">
-                        <option value="Default" ${currentStatus === 'Default' ? 'selected' : ''}>⬜ Not Marked</option>
-                        <option value="Attended" ${currentStatus === 'Attended' ? 'selected' : ''}>✅ Present</option>
-                        <option value="Skipped" ${currentStatus === 'Skipped' ? 'selected' : ''}>❌ Absent</option>
-                        <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>🔘 Cancelled</option>
-                        <option value="Medical Leave (ML)" ${currentStatus === 'Medical Leave (ML)' ? 'selected' : ''}>🏥 Medical Leave</option>
-                        <option value="Duty Leave (OD)" ${currentStatus === 'Duty Leave (OD)' ? 'selected' : ''}>📋 Duty Leave</option>
+                        <option value="Default" ${currentStatus === 'Default' ? 'selected' : ''}>Not Marked</option>
+                        <option value="Attended" ${currentStatus === 'Attended' ? 'selected' : ''}>Present</option>
+                        <option value="Skipped" ${currentStatus === 'Skipped' ? 'selected' : ''}>Absent</option>
+                        <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                        <option value="Medical Leave (ML)" ${currentStatus === 'Medical Leave (ML)' ? 'selected' : ''}>Medical Leave</option>
+                        <option value="Duty Leave (OD)" ${currentStatus === 'Duty Leave (OD)' ? 'selected' : ''}>Duty Leave</option>
                     </select>
                 </div>`;
             });
@@ -1677,7 +1729,7 @@ function renderFilterSection(sc) {
         });
 
         saveLogs(logs);
-        showAmsToast('✅ Attendance saved for ' + formatDateDisplay(amsSelectedDate));
+        showAmsToast('Attendance saved for ' + formatDateDisplay(amsSelectedDate));
 
         // Re-trigger portal calculation if available
         if (typeof calculateFromPortal === 'function') {
@@ -1737,7 +1789,7 @@ function renderFilterSection(sc) {
         });
 
         saveLogs(logs);
-        showAmsToast('✅ Class-wise attendance saved!');
+        showAmsToast('Class-wise attendance saved!');
 
         if (typeof calculateFromPortal === 'function') {
             try { calculateFromPortal(); } catch (e) { /* ignore */ }
@@ -1851,8 +1903,8 @@ function renderFilterSection(sc) {
             <button style="background: #4CAF50; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Attended')">✓ Attended</button>
             <button style="background: #f44336; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Skipped')">✗ Skipped</button>
             <button style="background: #9e9e9e; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Cancelled')">⨯ Cancelled</button>
-            <button style="background: #2196F3; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Duty Leave (OD)')">📋 Duty Leave</button>
-            <button style="background: #FF9800; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Medical Leave (ML)')">🏥 Medical Leave</button>
+            <button style="background: #2196F3; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Duty Leave (OD)')">Duty Leave</button>
+            <button style="background: #FF9800; color: white;" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Medical Leave (ML)')">Medical Leave</button>
             <button style="background: var(--light-bg); color: var(--dark-text);" onclick="window.amsUpdatePeriodStatus('${dateStr}', '${periodKey}', 'Default')">↺ Reset (Default)</button>
         `;
         
@@ -1920,6 +1972,35 @@ function renderFilterSection(sc) {
     }
     window.amsNormalizeLogs = normalizeLegacyLogs;
 
+    // Update the grid after marking without moving the screen: only the changed day's row
+    // and its month header are swapped; a full redraw (bulk marks) keeps the scroll position.
+    function refreshPeriodGrid(dates) {
+        const grid = document.querySelector('.period-grid-container');
+        if (!grid) return;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = renderPeriodGridModal();
+        const fresh = tmp.querySelector('.period-grid-container');
+        if (!fresh) return;
+        if (dates && dates.length) {
+            let swapped = true;
+            dates.forEach(d => {
+                const oldRow = grid.querySelector(`tr[data-date="${d}"]`), newRow = fresh.querySelector(`tr[data-date="${d}"]`);
+                if (oldRow && newRow) oldRow.replaceWith(newRow); else swapped = false;
+                const m = d.slice(0, 7);
+                const oldMonth = grid.querySelector(`tr[data-month="${m}"]`), newMonth = fresh.querySelector(`tr[data-month="${m}"]`);
+                if (oldMonth && newMonth) oldMonth.replaceWith(newMonth);
+            });
+            if (swapped) return;
+        }
+        const wrap = grid.querySelector('.pg-table-wrapper');
+        const top = wrap ? wrap.scrollTop : 0, left = wrap ? wrap.scrollLeft : 0;
+        const pageY = document.scrollingElement.scrollTop;
+        grid.replaceWith(fresh);
+        const wrap2 = fresh.querySelector('.pg-table-wrapper');
+        if (wrap2) { wrap2.scrollTop = top; wrap2.scrollLeft = left; }
+        document.scrollingElement.scrollTop = pageY;
+    }
+
     window.amsUpdatePeriodStatus = function (dateStr, periodKey, status) {
         closePgPopup();
         
@@ -1937,7 +2018,7 @@ function renderFilterSection(sc) {
         }
         
         saveLogs(logs);
-        showAmsToast('✅ Status updated');
+        showAmsToast('Status updated');
         
         if (window.SyncManager) {
             try { window.SyncManager.uploadAll(); } catch (e) { /* ignore */ }
@@ -1947,14 +2028,7 @@ function renderFilterSection(sc) {
         }
         
         refreshStatsAndRecords();
-        const gridContainer = document.querySelector('.period-grid-container');
-        if (gridContainer) {
-             const newGridHTML = renderPeriodGridModal();
-             const wrapper = document.createElement('div');
-             wrapper.innerHTML = newGridHTML;
-             const newGrid = wrapper.querySelector('.period-grid-container');
-             if (newGrid) gridContainer.outerHTML = newGrid.outerHTML;
-        }
+        refreshPeriodGrid([dateStr]);
     };
     
     // Open bulk action popup for a specific date row
@@ -1974,11 +2048,11 @@ function renderFilterSection(sc) {
             <button style="background: #4CAF50; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Attended')">✓ All Attended</button>
             <button style="background: #f44336; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Skipped')">✗ All Skipped</button>
             <button style="background: #9e9e9e; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Cancelled')">⨯ All Cancelled</button>
-            <button style="background: #2196F3; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Duty Leave (OD)')">📋 All Duty Leave</button>
-            <button style="background: #FF9800; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Medical Leave (ML)')">🏥 All Medical Leave</button>
+            <button style="background: #2196F3; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Duty Leave (OD)')">All Duty Leave</button>
+            <button style="background: #FF9800; color: white;" onclick="window.amsBulkDate('${dateStr}', 'Medical Leave (ML)')">All Medical Leave</button>
             <button style="background: var(--light-bg); color: var(--dark-text);" onclick="window.amsBulkDate('${dateStr}', 'Default')">↻ Reset All (Default)</button>
-            <button style="background: #7c3aed; color: white;" onclick="window.amsOpenShiftDay('${dateStr}')">🔁 Shift this day to weekend</button>
-            <button style="background: #0d9488; color: white;" onclick="window.amsOpenSuddenHoliday('${dateStr}')">🏖️ Mark as holiday</button>
+            <button style="background: #7c3aed; color: white;" onclick="window.amsOpenShiftDay('${dateStr}')">Shift this day to weekend</button>
+            <button style="background: #0d9488; color: white;" onclick="window.amsOpenSuddenHoliday('${dateStr}')">Mark as holiday</button>
         `;
         
         document.body.appendChild(popup);
@@ -2030,7 +2104,7 @@ function renderFilterSection(sc) {
         }
         
         saveLogs(logs);
-        showAmsToast(skipped ? `✅ Updated · ${skipped} class${skipped !== 1 ? 'es' : ''} not over yet left unmarked` : `✅ All periods on ${dateStr} updated`);
+        showAmsToast(skipped ? `Updated · ${skipped} class${skipped !== 1 ? 'es' : ''} not over yet left unmarked` : `All periods on ${dateStr} updated`);
         
         if (window.SyncManager) {
             try { window.SyncManager.uploadAll(); } catch (e) { /* ignore */ }
@@ -2040,14 +2114,7 @@ function renderFilterSection(sc) {
         }
         
         refreshStatsAndRecords();
-        const gridContainer = document.querySelector('.period-grid-container');
-        if (gridContainer) {
-             const newGridHTML = renderPeriodGridModal();
-             const wrapper = document.createElement('div');
-             wrapper.innerHTML = newGridHTML;
-             const newGrid = wrapper.querySelector('.period-grid-container');
-             if (newGrid) gridContainer.outerHTML = newGrid.outerHTML;
-        }
+        refreshPeriodGrid([dateStr]);
     };
     
     // Keep old function name for backward compatibility
@@ -2094,14 +2161,7 @@ function renderFilterSection(sc) {
         
         refreshStatsAndRecords();
         
-        const gridContainer = document.querySelector('.period-grid-container');
-        if (gridContainer) {
-             const newGridHTML = renderPeriodGridModal();
-             const wrapper = document.createElement('div');
-             wrapper.innerHTML = newGridHTML;
-             const newGrid = wrapper.querySelector('.period-grid-container');
-             if (newGrid) gridContainer.outerHTML = newGrid.outerHTML;
-        }
+        refreshPeriodGrid(null);
     };
 
 
@@ -2112,6 +2172,8 @@ function renderFilterSection(sc) {
     //          Off day -> holiday; weekend day -> custom schedule with the off
     //          day's exact periods.
     // Holiday: date(s) added to the class holiday list.
+    // Extra:   a Sat/Sun is made a working day that follows a chosen weekday's
+    //          timetable; no weekday is called off.
     // Logs on days that become holidays are removed (no class was held) and kept
     // in class.dayChanges so every change can be undone exactly.
 
@@ -2187,8 +2249,10 @@ function renderFilterSection(sc) {
                 ${changes.map(c => `
                     <div class="dc-recent-row">
                         <span>${c.type === 'shift'
-                            ? `🔁 ${amsFmt(c.off)} → held on ${amsFmt(c.on)}`
-                            : `🏖️ Holiday: ${c.dates.length > 1 ? `${amsFmt(c.dates[0])} → ${amsFmt(c.dates[c.dates.length - 1])}` : amsFmt(c.dates[0])}`}${c.reason ? ` · ${c.reason.replace(/</g, '&lt;')}` : ''}</span>
+                            ? `${amsFmt(c.off)} → held on ${amsFmt(c.on)}`
+                            : c.type === 'extra'
+                            ? `${amsFmt(c.on)} working · ${DAYS[c.dayIndex === 6 ? 0 : c.dayIndex + 1]}'s timetable`
+                            : `Holiday: ${c.dates.length > 1 ? `${amsFmt(c.dates[0])} → ${amsFmt(c.dates[c.dates.length - 1])}` : amsFmt(c.dates[0])}`}${c.reason ? ` · ${c.reason.replace(/</g, '&lt;')}` : ''}</span>
                         <button onclick="window.amsUndoDayChange('${c.id}')">Undo</button>
                     </div>`).join('')}
             </div>`;
@@ -2210,7 +2274,7 @@ function renderFilterSection(sc) {
         modal.innerHTML = `
             <div class="modal-content dc-modal">
                 <button class="modal-close" onclick="closeModal('amsDayChangeModal')">&times;</button>
-                <div class="dc-icon">🔁</div>
+                <div class="dc-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
                 <h2>Day shifted to weekend</h2>
                 <p class="dc-lead">A weekday was called off and its classes were held on a Saturday or Sunday instead.</p>
                 <div class="dc-dates">
@@ -2295,7 +2359,100 @@ function renderFilterSection(sc) {
             c.holidays = c.holidays.filter(h => h !== on).sort();
             c.dayChanges.push(change);
         });
-        afterDayChange(`✅ ${amsFmt(off)} off · classes on ${amsFmt(on)}`);
+        afterDayChange(`${amsFmt(off)} off · classes on ${amsFmt(on)}`);
+    };
+
+    // ---------- Weekend as working day ----------
+    const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    window.amsOpenWorkingWeekend = function (date) {
+        closePgPopup();
+        const sc = getSelectedClass();
+        if (!sc) return;
+        // Default: the coming Saturday (today if it is a weekend day)
+        const d = parseDate(date || formatDate(new Date()));
+        if (!date && d.getDay() !== 0) d.setDate(d.getDate() + (6 - d.getDay()));
+        const on = formatDate(d);
+
+        const modal = ensureDayChangeModal();
+        modal.innerHTML = `
+            <div class="modal-content dc-modal">
+                <button class="modal-close" onclick="closeModal('amsDayChangeModal')">&times;</button>
+                <div class="dc-icon"><i class="fa-solid fa-calendar-plus"></i></div>
+                <h2>Weekend as working day</h2>
+                <p class="dc-lead">College declared a Saturday or Sunday as a working day? Pick the date and whose timetable it follows. No weekday is called off.</p>
+                <div class="dc-dates">
+                    <label><span>Working day</span><input type="date" id="dcExtraOn" value="${on}"></label>
+                    <label><span>Follows timetable of</span>
+                        <select id="dcExtraDay">${WEEKDAYS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select>
+                    </label>
+                </div>
+                <div class="dc-preview" id="dcExtraPreview"></div>
+                <div class="form-actions" style="justify-content: space-between;">
+                    <button class="btn secondary-btn" onclick="closeModal('amsDayChangeModal')">Cancel</button>
+                    <button class="btn primary-btn" onclick="window.amsSaveWorkingWeekend()">Save</button>
+                </div>
+                ${recentChangesHtml()}
+            </div>`;
+        const update = () => {
+            const onV = document.getElementById('dcExtraOn').value;
+            const dayIndex = Number(document.getElementById('dcExtraDay').value);
+            const el = document.getElementById('dcExtraPreview');
+            if (!onV) { el.innerHTML = 'Pick a date.'; return; }
+            const names = extraSourcePeriods(onV, dayIndex).map((p, i) => p ? `P${i + 1} ${p.shortName || p.code}` : null).filter(Boolean);
+            const onDow = parseDate(onV).getDay();
+            const existing = getPeriodsForDate(onV).length;
+            el.innerHTML = `
+                <div><strong>${amsFmt(onV)}</strong> follows <strong>${WEEKDAYS[dayIndex]}'s</strong> timetable:</div>
+                <div class="dc-chips">${names.length ? names.map(n => `<span>${n}</span>`).join('') : '<em>No classes on that day</em>'}</div>
+                ${onDow !== 0 && onDow !== 6 ? '<div class="dc-warn">Note: this date is not a Saturday or Sunday.</div>' : ''}
+                ${existing ? `<div class="dc-warn">${amsFmt(onV)} already has ${existing} class${existing > 1 ? 'es' : ''}. They will be replaced.</div>` : ''}`;
+        };
+        modal.querySelector('#dcExtraOn').addEventListener('change', update);
+        modal.querySelector('#dcExtraDay').addEventListener('change', update);
+        update();
+        openModal('amsDayChangeModal');
+    };
+
+    function extraSourcePeriods(dateStr, dayIndex) {
+        return timetablePeriods(getSelectedClass(), amsClassName(), dateStr, dayIndex, true);
+    }
+
+    window.amsSaveWorkingWeekend = function () {
+        const on = document.getElementById('dcExtraOn').value;
+        const dayIndex = Number(document.getElementById('dcExtraDay').value);
+        if (!on) { alert('Please pick a date.'); return; }
+
+        const periods = extraSourcePeriods(on, dayIndex);
+        if (!periods.some(Boolean)) { alert(`There are no classes on ${WEEKDAYS[dayIndex]} in your timetable, so there is nothing to follow.`); return; }
+
+        const sc = getSelectedClass();
+        const all = getCustomSchedules();
+        const logs = getLogs();
+        if (logs[on] && !confirm(`Attendance is already marked on ${amsFmt(on)}. It will be cleared so you can mark the new classes. Continue?`)) return;
+
+        const change = {
+            id: 'dc' + Date.now(),
+            type: 'extra', on, dayIndex,
+            prevOnSchedule: all[on] || null,
+            prevOnHoliday: (sc.holidays || []).includes(on),
+            removedLogs: logs[on] ? { [on]: logs[on] } : {},
+            savedAt: new Date().toISOString()
+        };
+
+        const codes = periods.map(p => p ? p.code : null);
+        const counts = {};
+        codes.forEach(c => { if (c) counts[c] = (counts[c] || 0) + 1; });
+        all[on] = { ...counts, _periods: codes };
+        setCustomSchedules(all);
+
+        if (logs[on]) { delete logs[on]; saveLogs(logs); }
+
+        updateClass(c => {
+            c.holidays = c.holidays.filter(h => h !== on);
+            c.dayChanges.push(change);
+        });
+        afterDayChange(`${amsFmt(on)} is a working day (${WEEKDAYS[dayIndex]})`);
     };
 
     // ---------- Sudden holiday ----------
@@ -2306,7 +2463,7 @@ function renderFilterSection(sc) {
         modal.innerHTML = `
             <div class="modal-content dc-modal">
                 <button class="modal-close" onclick="closeModal('amsDayChangeModal')">&times;</button>
-                <div class="dc-icon">🏖️</div>
+                <div class="dc-icon"><i class="fa-solid fa-umbrella-beach"></i></div>
                 <h2>Sudden holiday</h2>
                 <p class="dc-lead">College declared a holiday? It is added to your holiday list and its classes stop counting.</p>
                 <div class="dc-dates">
@@ -2372,7 +2529,7 @@ function renderFilterSection(sc) {
             c.holidays.sort();
             c.dayChanges.push(change);
         });
-        afterDayChange(`✅ Holiday added${dates.length > 1 ? ` (${dates.length} days)` : ''}`);
+        afterDayChange(`Holiday added${dates.length > 1 ? ` (${dates.length} days)` : ''}`);
     };
 
     // ---------- Undo ----------
@@ -2385,15 +2542,21 @@ function renderFilterSection(sc) {
         Object.keys(change.removedLogs || {}).forEach(d => { logs[d] = change.removedLogs[d]; });
         saveLogs(logs);
 
-        if (change.type === 'shift') {
+        if (change.type === 'shift' || change.type === 'extra') {
             const all = getCustomSchedules();
             if (change.prevOnSchedule) all[change.on] = change.prevOnSchedule; else delete all[change.on];
             if (change.prevOffSchedule) all[change.off] = change.prevOffSchedule;
             setCustomSchedules(all);
+            if (change.type === 'extra' && !change.removedLogs?.[change.on]) {
+                // Attendance marked on the extra day goes with it
+                if (logs[change.on]) { delete logs[change.on]; saveLogs(logs); }
+            }
         }
 
         updateClass(c => {
-            if (change.type === 'shift') {
+            if (change.type === 'extra') {
+                if (change.prevOnHoliday && !c.holidays.includes(change.on)) c.holidays.push(change.on);
+            } else if (change.type === 'shift') {
                 if (!change.prevOffHoliday) c.holidays = c.holidays.filter(h => h !== change.off);
                 if (change.prevOnHoliday && !c.holidays.includes(change.on)) c.holidays.push(change.on);
             } else {

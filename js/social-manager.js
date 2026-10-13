@@ -114,7 +114,7 @@ const SocialManager = {
     // --- POLLING SYSTEM ---
     async initiatePoll(sharedId) {
         if (!navigator.onLine) {
-            alert("⚠️ You seem to be offline.\nPlease connect to the internet to start a poll.");
+            alert("You seem to be offline.\nPlease connect to the internet to start a poll.");
             return;
         }
 
@@ -140,7 +140,7 @@ const SocialManager = {
         }
 
         if (existing && existing.length > 0) {
-            alert("⚠️ A poll for today already exists!");
+            alert("A poll for today already exists!");
             return;
         }
 
@@ -156,7 +156,7 @@ const SocialManager = {
         if (error) {
             alert("Failed to start poll: " + error.message);
         } else {
-            alert("📢 Mass Bunk Poll Started! Your classmates will be notified.");
+            alert("Mass Bunk Poll Started! Your classmates will be notified.");
         }
     },
 
@@ -164,7 +164,7 @@ const SocialManager = {
         if (!navigator.onLine) {
             const btn = event.target;
             const originalText = btn.innerText;
-            btn.innerText = "Offline ❌";
+            btn.innerText = "Offline";
             setTimeout(() => btn.innerText = originalText, 2000);
             return;
         }
@@ -193,7 +193,7 @@ const SocialManager = {
         if (!window.supabase) return;
 
         // Confirm Action
-        if (!confirm("🔄 This edit changes the class version.\n\nDo you want to notify your classmates so they can update too?")) {
+        if (!confirm("This edit changes the class version.\n\nDo you want to notify your classmates so they can update too?")) {
             return;
         }
 
@@ -207,7 +207,7 @@ const SocialManager = {
             full_class_data: fullClassData
         }]);
 
-        alert("✅ Update notification sent to classmates!");
+        alert("Update notification sent to classmates!");
     },
 
     async checkForClassUpdates(currentSharedId, currentClassObj) {
@@ -247,7 +247,7 @@ const SocialManager = {
         modal.innerHTML = `
         <div class="modal-content" style="max-width: 600px; border-left: 5px solid var(--primary-grad-start);">
             <div class="modal-header">
-                <h2>🔄 Class Update Available</h2>
+                <h2>Class Update Available</h2>
                 <p>A classmate has updated the class details.</p>
             </div>
             <div style="background: var(--light-bg); padding: 15px; border-radius: 8px; margin: 15px 0;">
@@ -262,7 +262,7 @@ const SocialManager = {
                 </div>
             </div>
             <div class="form-actions">
-                <button class="btn success-btn" onclick="SocialManager.applyClassUpdate('${update.id}')">✅ Apply Changes</button>
+                <button class="btn success-btn" onclick="SocialManager.applyClassUpdate('${update.id}')">Apply Changes</button>
                 <button class="btn secondary-btn" onclick="document.getElementById('updateProposalModal').remove()">Ignore</button>
             </div>
         </div>`;
@@ -323,7 +323,7 @@ const SocialManager = {
         // Warn about Portal Setup
         if (oldClass.portalSetup && !newClass.portalSetup) {
             html += `<div style="margin-top:10px; padding:10px; background:#fff3cd; color:#856404; font-size:0.8rem; border-radius:4px;">
-                ⚠️ <strong>Note:</strong> Your local Portal Mode setup (baseline data) will be preserved, but verify it after updating.
+                <strong>Note:</strong> Your local Portal Mode setup (baseline data) will be preserved, but verify it after updating.
              </div>`;
         }
 
@@ -361,14 +361,14 @@ const SocialManager = {
             if (window.SyncManager) window.SyncManager.saveClass(currentClassName, newClassData);
 
             document.getElementById('updateProposalModal').remove();
-            alert("✅ Class updated successfully!");
+            alert("Class updated successfully!");
         }
     },
 
     // --- UI DASHBOARD LOGIC ---
     openCommunityDashboard() {
         if (!window.AuthManager || !window.AuthManager.user) {
-            alert("🔒 Access Denied\n\nCommunity features (Mass Bunk Stats, Polls) are only available for signed-in users.\n\nPlease sign in to continue.");
+            alert("Access Denied\n\nCommunity features (Mass Bunk Stats, Polls) are only available for signed-in users.\n\nPlease sign in to continue.");
             return;
         }
 
@@ -429,7 +429,7 @@ const SocialManager = {
                 // visual flare
                 let percentage = Math.min(count * 5, 100); // Assume 20 students = 100%
                 document.getElementById('massBunkMeter').textContent = `${percentage}%`;
-                document.getElementById('massBunkStatus').textContent = percentage > 50 ? "High Chance! 🔥" : "Low Chance ❄️";
+                document.getElementById('massBunkStatus').textContent = percentage > 50 ? "High Chance!" : "Low Chance";
             }
         }
 

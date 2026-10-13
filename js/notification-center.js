@@ -329,7 +329,7 @@
             });
         }
         readLog().forEach(h => {
-            items.push({ id: histId(h), kind: 'hist', at: h.at, tone: 'slate', icon: esc(h.icon || '🔔'), emoji: true,
+            items.push({ id: histId(h), kind: 'hist', at: h.at, tone: 'slate', icon: h.icon ? esc(h.icon) : '<i class="fa-solid fa-bell"></i>', emoji: !!h.icon,
                 title: h.title, body: h.body || '', unread: h.at > lastSeenAtOpen, raw: h });
         });
         return items;

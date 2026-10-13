@@ -2,7 +2,7 @@
 // DAY CHECK: end-of-day "How was today?" notification
 // ============================================================
 // After each working day (at the class reminder time) the user gets a
-// notification with ✅ All Present / ❌ All Absent buttons. Tapping the body
+// notification with All Present / All Absent buttons. Tapping the body
 // opens an in-app panel with a third option: mark manually.
 //  - Only days with classes (holidays / empty days / outside semester skipped)
 //  - Skipped when the day is already marked
@@ -131,7 +131,7 @@
         syncDayPlan();
 
         if (!quiet && typeof showToast === 'function') {
-            const label = status === 'Attended' ? '✅ All present' : '❌ All absent';
+            const label = status === 'Attended' ? 'All present' : 'All absent';
             showToast(`${label} · ${fmt(dateStr)}`,
                 `${applied} class${applied !== 1 ? 'es' : ''} marked${kept ? `, ${kept} OD/ML/cancelled kept` : ''}${upcoming ? `, ${upcoming} not over yet left for later` : ''}. Attendance updated.`,
                 {
@@ -188,10 +188,10 @@
             if (r.applied || r.kept) done.push(`${item.status === 'Attended' ? 'All present' : 'All absent'} · ${fmt(item.date)}`);
         });
         if (done.length && typeof showToast === 'function') {
-            showToast('✅ Saved from notification', done.join(', '), { duration: 5000 });
+            showToast('Saved from notification', done.join(', '), { duration: 5000 });
         }
         if (done.length && window.NotificationCenter) {
-            NotificationCenter.log({ icon: '✅', title: 'Applied marks from notifications', body: done.join(', ') });
+            NotificationCenter.log({ icon: '', title: 'Applied marks from notifications', body: done.join(', ') });
         }
     }
 
@@ -226,9 +226,9 @@
                 ${names.length ? `<div class="dc-sheet-chips">${names.map(n => `<span>${n}</span>`).join('')}</div>` : ''}
                 ${keys.length ? `
                 <div class="dc-sheet-actions">
-                    <button class="dc-act present" onclick="DayCheck.mark('${date}', 'Attended')"><span>✅</span>All Present</button>
-                    <button class="dc-act absent" onclick="DayCheck.mark('${date}', 'Skipped')"><span>❌</span>All Absent</button>
-                    <button class="dc-act manual" onclick="DayCheck.manual('${date}')"><span>✏️</span>Mark manually</button>
+                    <button class="dc-act present" onclick="DayCheck.mark('${date}', 'Attended')"><span></span>All Present</button>
+                    <button class="dc-act absent" onclick="DayCheck.mark('${date}', 'Skipped')"><span></span>All Absent</button>
+                    <button class="dc-act manual" onclick="DayCheck.manual('${date}')"><span></span>Mark manually</button>
                 </div>
                 <p class="dc-sheet-note">OD, ML and cancelled classes you already marked are kept.</p>` : `
                 <button class="dc-act manual" onclick="DayCheck.close()">Close</button>`}
@@ -261,7 +261,7 @@
         if (!force && (!keys.length || isMarked(today))) return false;
 
         if (window.NotificationCenter) {
-            NotificationCenter.log({ icon: '📚', title: 'How was today?', body: `${fmt(today)} · ${keys.length} class${keys.length !== 1 ? 'es' : ''} to mark` });
+            NotificationCenter.log({ icon: '', title: 'How was today?', body: `${fmt(today)} · ${keys.length} class${keys.length !== 1 ? 'es' : ''} to mark` });
         }
 
         // App open and visible: show the panel instead of a system notification
@@ -275,15 +275,15 @@
         }
         try {
             const reg = await navigator.serviceWorker.ready;
-            await reg.showNotification('📚 How was today?', {
+            await reg.showNotification('How was today?', {
                 body: `${fmt(today)} · ${keys.length} class${keys.length !== 1 ? 'es' : ''} in ${name}. Mark all at once, or tap to mark each class.`,
                 icon: '/icon-192x192.png',
                 badge: '/badge-icon.png',
                 tag: `day-check-${today}`,
                 requireInteraction: true,
                 actions: [
-                    { action: 'all-present', title: '✅ All Present' },
-                    { action: 'all-absent', title: '❌ All Absent' }
+                    { action: 'all-present', title: 'All Present' },
+                    { action: 'all-absent', title: 'All Absent' }
                 ],
                 data: { kind: 'day-check', date: today, className: name, url: `/?dayCheck=${today}` }
             });
@@ -311,7 +311,7 @@
             if (data.type === 'QUICK_MARK' && data.date && data.status) {
                 applyDayMark(data.date, data.status);
                 if (window.NotificationCenter) {
-                    NotificationCenter.log({ icon: data.status === 'Attended' ? '✅' : '❌', title: `Marked all ${data.status === 'Attended' ? 'present' : 'absent'} from notification`, body: fmt(data.date) });
+                    NotificationCenter.log({ icon: data.status === 'Attended' ? '' : '', title: `Marked all ${data.status === 'Attended' ? 'present' : 'absent'} from notification`, body: fmt(data.date) });
                 }
             } else if (data.type === 'OPEN_DAY_CHECK' && data.date) {
                 openPanel(data.date);

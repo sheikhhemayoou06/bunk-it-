@@ -162,7 +162,7 @@
         if (window.SyncManager) { try { SyncManager.uploadAll(); } catch (e) { /* offline */ } }
         close();
         if (typeof recalculateEverything === 'function') { try { recalculateEverything({ quiet: false }); } catch (e) { /* ignore */ } }
-        if (typeof showToast === 'function') showToast('✅ Matched to portal', `${matched} subject${matched !== 1 ? 's' : ''} now use your portal numbers up to ${today}.`, { duration: 4500 });
+        if (typeof showToast === 'function') showToast('Matched to portal', `${matched} subject${matched !== 1 ? 's' : ''} now use your portal numbers up to ${today}.`, { duration: 4500 });
     }
 
     function show() {

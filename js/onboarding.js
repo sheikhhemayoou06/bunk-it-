@@ -126,15 +126,15 @@
             </button>`;
         show(`
             <div class="ob-hero ob-hero-sm">
-                <div class="ob-emoji">📚</div>
+                <div class="ob-emoji"><i class="fa-solid fa-graduation-cap"></i></div>
                 <h1>${name ? `Hi ${esc(name.split(' ')[0])}, let's` : "Let's"} set up your class</h1>
                 <p>Pick the easiest way. You can change everything later.</p>
             </div>
             <div class="ob-options">
-                ${card('create', '✍️', 'indigo', 'Set up my class', 'Add subjects, dates and your weekly timetable')}
-                ${card('qr', '📷', 'teal', "Scan a classmate's QR", 'Copy their class setup in seconds')}
-                ${card('link', '🔗', 'violet', 'Open a share link', 'Paste the class link a classmate sent you')}
-                ${card('example', '🧪', 'amber', 'Try an example class', 'Explore Bunkit with sample data first')}
+                ${card('create', '', 'indigo', 'Set up my class', 'Add subjects, dates and your weekly timetable')}
+                ${card('qr', '', 'teal', "Scan a classmate's QR", 'Copy their class setup in seconds')}
+                ${card('link', '', 'violet', 'Open a share link', 'Paste the class link a classmate sent you')}
+                ${card('example', '', 'amber', 'Try an example class', 'Explore Bunkit with sample data first')}
             </div>
         `, 1);
     }
@@ -166,7 +166,7 @@
     function linkStep() {
         show(`
             <div class="ob-hero ob-hero-sm">
-                <div class="ob-emoji">🔗</div>
+                <div class="ob-emoji"><i class="fa-solid fa-link"></i></div>
                 <h1>Open a share link</h1>
                 <p>Paste the class link (or code) your classmate shared. Their subjects, dates and timetable are copied to your app.</p>
             </div>

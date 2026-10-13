@@ -1199,3 +1199,31 @@ body.dark-mode .pt-warn {
     .pf-ig-stats strong { font-size: 1.02rem; }
     .pf-ig-stats span { font-size: 0.72rem; }
 }
+
+/* ============================================================
+   PROFILE: professional, roomy layout (matches Smart Search palette)
+   ============================================================ */
+#accountPage { --pro-1: #4f46e5; --pro-2: #7c3aed; --pro-grad: linear-gradient(135deg, #4f46e5 0%, #6d28d9 60%, #7c3aed 100%); }
+#accountPage .pf-ig-avatar.ring { background: var(--pro-grad); }
+#accountPage .pf-ig-avatar span { background: var(--pro-grad) !important; }
+#accountPage .pf-ig-head { gap: 18px; }
+#accountPage .pf-ig-btns { gap: 10px; margin-top: 14px; }
+#accountPage .pf-ig-btn { border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); font-weight: 700; }
+#accountPage .pf-ig-btn.pf-ig-primary { background: var(--pro-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 20px -12px rgba(79, 70, 229, .8); }
+#accountPage .pf-ig-complete { border-radius: 14px; margin-top: 12px; }
+
+/* Shortcuts: even grid instead of a scrolling row of circles */
+#accountPage .pf-hls { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 10px; margin: 18px 0 6px; padding: 0; overflow: visible; }
+#accountPage .pf-hl { width: 100%; padding: 12px 4px 10px; border-radius: 16px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); gap: 8px; font-size: .78rem; font-weight: 600; transition: border-color .15s, transform .15s; }
+#accountPage .pf-hl:hover { border-color: color-mix(in srgb, var(--pro-1) 45%, transparent); transform: translateY(-1px); }
+#accountPage .pf-hl-ring { width: 40px; height: 40px; padding: 0; border-radius: 12px; background: color-mix(in srgb, var(--pro-1) 10%, transparent); }
+#accountPage .pf-hl-in { border-radius: 12px; background: transparent !important; color: var(--pro-1) !important; font-size: 1rem; }
+
+/* Sections: more air, quieter labels, consistent cards */
+#accountPage .pf-group { margin-top: 24px; }
+#accountPage .pf-group-label { font-size: .7rem; font-weight: 800; letter-spacing: .6px; color: var(--pf-muted, #64748b); margin: 0 4px 8px; }
+#accountPage .pf-card { border-radius: 18px; border: 1px solid var(--pf-border); box-shadow: 0 14px 30px -26px rgba(15, 23, 42, .55); }
+#accountPage .pf-row { padding-top: 14px; padding-bottom: 14px; }
+#accountPage .pf-row-icon { border-radius: 12px; }
+#accountPage .pf-row-title { font-weight: 700; }
+#accountPage .pf-btn-primary { background: var(--pro-grad); border: none; }
