@@ -960,3 +960,12 @@ body.dark-mode #smartSearchPage .si-tone-pill.danger { color: #f87171; }
 .si-dr-item:hover i { color: var(--au-1); }
 .si-dr-empty { margin: 4px 10px; font-size: .85rem; color: var(--si-text-secondary); }
 #smartSearchPage .si-drawer { --au-1: #6366f1; }
+
+/* With OD/ML / Original switch on each answer */
+#smartSearchPage .si-odml-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: -2px 0 14px; }
+#smartSearchPage .si-odml-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--au-1) 8%, var(--si-surface)); border: 1px solid color-mix(in srgb, var(--au-1) 18%, transparent); }
+#smartSearchPage .si-odml-seg button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: none; border-radius: 999px; background: transparent; color: var(--si-text-secondary); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+#smartSearchPage .si-odml-seg button.on { background: var(--au-grad); color: #fff; box-shadow: 0 6px 14px -8px rgba(99, 102, 241, .9); }
+#smartSearchPage .si-odml-note { font-size: .76rem; color: var(--si-text-secondary); }
+/* The header switch is replaced by the one on each answer */
+#smartSearchPage .si-header .si-odml-slot { display: none !important; }

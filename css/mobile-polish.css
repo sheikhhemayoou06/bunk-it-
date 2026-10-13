@@ -393,3 +393,29 @@
 @media (prefers-reduced-motion: reduce) {
     .modal .modal-content { animation: none; }
 }
+
+/* ---------- Smart Search answers on phones: roomy, single layer of cards ---------- */
+@media (max-width: 600px) {
+    #smartSearchPage .si-answer-card { padding: 14px 12px 8px; }
+    #smartSearchPage .si-answer-footer { margin: 10px -12px -8px; padding: 6px 8px; }
+    #smartSearchPage .si-answer-header { gap: 8px; margin-bottom: 10px; }
+    #smartSearchPage .si-answer-title { font-size: 0.98rem; }
+    #smartSearchPage .si-tone-pill { font-size: 0.62rem; padding: 3px 8px; }
+    #smartSearchPage .si-answer-body { font-size: 0.93rem; line-height: 1.6; }
+    /* stat tiles: big number, short readable label */
+    #smartSearchPage .si-stats-grid { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)) !important; gap: 8px !important; }
+    #smartSearchPage .si-answer-body .si-stat-tile { padding: 10px 10px 9px; border-radius: 14px; }
+    #smartSearchPage .si-stat-value { font-size: 1.2rem !important; }
+    #smartSearchPage .si-stat-label { font-size: 0.68rem !important; letter-spacing: 0 !important; text-transform: none !important; line-height: 1.25; }
+    /* tables → one layer of row cards (no box around the cards) */
+    #smartSearchPage .si-answer-body table.si-subject-table,
+    #smartSearchPage .si-answer-body .si-table-scroll { border: none !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; overflow: visible !important; padding: 0 !important; }
+    #smartSearchPage .si-subject-table tr { padding: 10px 12px; border-radius: 14px; gap: 6px 10px; }
+    #smartSearchPage .si-subject-table tbody tr:nth-child(even) td { background: transparent !important; }
+    /* With OD/ML switch fits on one line */
+    #smartSearchPage .si-odml-seg button { padding: 6px 10px; font-size: 0.76rem; }
+    #smartSearchPage .si-odml-note { flex-basis: 100%; font-size: 0.72rem; }
+    /* composer: room for the placeholder (New chat lives in the ☰ menu) */
+    #smartSearchPage .si-new-chat { display: none !important; }
+    #smartSearchPage .si-search-input { font-size: 0.95rem; padding-left: 6px; }
+}

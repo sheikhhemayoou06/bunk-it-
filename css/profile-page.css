@@ -1227,3 +1227,24 @@ body.dark-mode .pt-warn {
 #accountPage .pf-row-icon { border-radius: 12px; }
 #accountPage .pf-row-title { font-weight: 700; }
 #accountPage .pf-btn-primary { background: var(--pro-grad); border: none; }
+
+/* Profile sub-pages + rows: same professional look as Home */
+#accountPage { background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .10), transparent 70%), var(--pf-bg, #f8fafc); }
+body.dark-mode #accountPage { background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .22), transparent 70%), var(--pf-bg, #0f172a); }
+#accountPage .pf-sub-top { padding: 8px; margin-bottom: 14px; border-radius: 18px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); box-shadow: 0 10px 24px -20px rgba(15, 23, 42, .5); }
+#accountPage .pf-sub-top > button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); }
+#accountPage .pf-sub-top h1 { font-weight: 800; }
+#accountPage .pf-row-icon, #accountPage .pf-info-icon { width: 40px; height: 40px; border-radius: 12px; color: #fff !important; box-shadow: 0 8px 16px -10px rgba(15, 23, 42, .55); }
+#accountPage .pf-row-icon i, #accountPage .pf-info-icon i { color: #fff !important; }
+#accountPage .pf-info-icon { background: var(--pro-grad) !important; }
+#accountPage .pf-tone-indigo { background: linear-gradient(135deg, #4f46e5, #6366f1) !important; }
+#accountPage .pf-tone-violet { background: linear-gradient(135deg, #6d28d9, #8b5cf6) !important; }
+#accountPage .pf-tone-blue { background: linear-gradient(135deg, #2563eb, #3b82f6) !important; }
+#accountPage .pf-tone-cyan { background: linear-gradient(135deg, #0e7490, #06b6d4) !important; }
+#accountPage .pf-tone-green { background: linear-gradient(135deg, #059669, #10b981) !important; }
+#accountPage .pf-tone-amber { background: linear-gradient(135deg, #d97706, #f59e0b) !important; }
+#accountPage .pf-tone-orange { background: linear-gradient(135deg, #ea580c, #f97316) !important; }
+#accountPage .pf-tone-red { background: linear-gradient(135deg, #dc2626, #ef4444) !important; }
+#accountPage .pf-tone-slate { background: linear-gradient(135deg, #475569, #64748b) !important; }
+#accountPage .pf-value-pill { border-radius: 999px; font-weight: 800; }
+#accountPage .pf-page-note { color: var(--pf-muted, #64748b); }

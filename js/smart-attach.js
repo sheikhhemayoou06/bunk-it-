@@ -790,7 +790,7 @@ ${facts}`, []);
             let r = null;
             try { r = SmartSearch.processQuery(String(plan.english)); } catch (e) { r = null; }
             if (r && !r._fallback) {
-                chat.renderAnswer(r, thinkingEl, query);
+                chat.renderAnswer(r, thinkingEl, query, String(plan.english));
                 if (!isEnglish) explainInLanguage(r, query, language, thinkingEl);
                 return;
             }

@@ -49,7 +49,18 @@
     }
 
     // --- Data Helpers ---
+    // Answers follow the "With OD/ML / Original" view: Original = only classes you were
+    // present in (OD/ML hours taken out), so every number in an answer is recalculated.
     function getAttendanceData() {
+        const raw = getAttendanceDataRaw();
+        if (!window.OdmlView || OdmlView.get() !== 'original') return raw;
+        return raw.map(s => {
+            const odml = Math.min(Number(s.odml) || 0, Number(s.attended) || 0);
+            return odml ? { ...s, attended: (Number(s.attended) || 0) - odml, odml: 0, initialOdml: 0 } : s;
+        });
+    }
+
+    function getAttendanceDataRaw() {
         // First try the already-computed data
         if (typeof currentAnalysisData !== 'undefined' && currentAnalysisData.length > 0) {
             // The main calculation counts "remaining" from the day after its current date.
@@ -2545,8 +2556,34 @@
         });
     }
 
-    function renderAnswer(result, target, query) {
+    // Answers with attendance numbers get their own With OD/ML / Original switch
+    function odmlSwitchHtml() {
+        const v = window.OdmlView ? OdmlView.get() : 'with';
+        const hasOdml = getAttendanceDataRaw().some(x => (Number(x.odml) || 0) > 0);
+        return `<div class="si-odml-bar">
+            <div class="si-odml-seg" role="group" aria-label="Show attendance">
+                <button type="button" class="${v === 'with' ? 'on' : ''}" aria-pressed="${v === 'with'}" onclick="SmartSearch.switchView(this, 'with')"><i class="fa-solid fa-briefcase-medical"></i> With OD/ML</button>
+                <button type="button" class="${v === 'original' ? 'on' : ''}" aria-pressed="${v === 'original'}" onclick="SmartSearch.switchView(this, 'original')"><i class="fa-solid fa-user-check"></i> Original</button>
+            </div>
+            <span class="si-odml-note">${!hasOdml ? 'No OD/ML marked yet, both views are the same' : v === 'original' ? 'Only classes you were present in' : 'Duty & medical leave counted by your OD/ML rule'}</span>
+        </div>`;
+    }
+
+    // Flip one answer between the two views: recalculated from scratch for that view
+    function switchView(btn, view) {
+        if (window.OdmlView) OdmlView.set(view);
+        const msg = btn.closest('.si-msg-bot');
+        const q = msg && msg.dataset.rerun;
+        if (!q) return;
+        let r = null;
+        try { r = processQuery(q); } catch (e) { r = null; }
+        if (r) renderAnswer(r, msg, msg.dataset.query || q, q);
+    }
+
+    function renderAnswer(result, target, query, rerunQuery) {
         if (!result) { if (target) target.remove(); return; }
+        const rerun = rerunQuery || (result._fallback ? '' : query);
+        const showSwitch = !!rerun && /%/.test(result.body || '');
 
         const iconClass = STATUS_ICONS[result.iconClass] ? result.iconClass : 'info';
         const title = String(result.title || '').replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim();
@@ -2557,6 +2594,7 @@
                     <div class="si-answer-title">${title}</div>
                     <span class="si-tone-pill ${iconClass}">${{ safe: 'Safe', warning: 'Careful', danger: 'At risk', info: 'Answer', neutral: 'Info' }[iconClass]}</span>
                 </div>
+                ${showSwitch ? odmlSwitchHtml() : ''}
                 <div class="si-answer-body">${polishBody(result.body || '')}</div>
                 <div class="si-answer-footer">
                     ${canSpeak() ? `<button type="button" class="si-listen" onclick="SmartSearch.speakAnswer(this)" aria-label="Read this answer aloud"><i class="fa-solid fa-volume-high"></i> Listen</button>` : ''}
@@ -2569,9 +2607,10 @@
                 </div>
             </div>`);
 
-        if (window.OdmlView) OdmlView.refresh(getAttendanceData());
+        if (window.OdmlView) OdmlView.refresh(getAttendanceDataRaw());
         let el = target;
         if (el) { el.innerHTML = html; } else { el = appendMessage(html, 'si-msg-bot'); }
+        if (rerun) { el.dataset.rerun = rerun; el.dataset.query = query || rerun; } else { delete el.dataset.rerun; }
         labelTableCells(el);
         scrollThread(el);
 
@@ -2912,7 +2951,7 @@
 
     function mountOdmlToggle() {
         const slot = document.getElementById('siOdmlToggle');
-        if (slot && window.OdmlView) { slot.innerHTML = OdmlView.toggleHTML(); OdmlView.refresh(getAttendanceData()); }
+        if (slot && window.OdmlView) { slot.innerHTML = OdmlView.toggleHTML(); OdmlView.refresh(getAttendanceDataRaw()); }
     }
 
     function initSmartSearch() {
@@ -2933,6 +2972,7 @@
         initSmartSearch,
         clearHistory,
         processQuery,
+        switchView,
         openDrawer,
         closeDrawer,
         drawerAsk,
@@ -2944,6 +2984,6 @@
         normalizeIndic,
         computeClassAttendance: autoComputeAttendanceData,
         // shared with js/smart-attach.js
-        _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread, periodsOn: (d) => { const c = getSelectedClassObj(); return c ? periodsOn(c, d) : []; }, examOn, dayChangeFor: (d) => { const c = getSelectedClassObj(); return c ? dayChangeFor(c, d) : null; } }
+        _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData: getAttendanceDataRaw, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread, periodsOn: (d) => { const c = getSelectedClassObj(); return c ? periodsOn(c, d) : []; }, examOn, dayChangeFor: (d) => { const c = getSelectedClassObj(); return c ? dayChangeFor(c, d) : null; } }
     };
 })();
