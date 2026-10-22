@@ -1277,3 +1277,16 @@ body.dark-mode #dashboardPage { background: radial-gradient(800px 380px at 10% -
 /* Line icons that replaced emoji in pop-ups, menus and empty states */
 .dc-icon i, .pt-icon i, .ob-emoji i, .ams-empty-icon i, .tm-change-icon i, .tm-mm-ic i, .si-weekend-icon i { color: #4f46e5; }
 body.dark-mode .dc-icon i, body.dark-mode .pt-icon i, body.dark-mode .ob-emoji i, body.dark-mode .ams-empty-icon i, body.dark-mode .tm-change-icon i, body.dark-mode .tm-mm-ic i, body.dark-mode .si-weekend-icon i { color: #a5b4fc; }
+
+/* ---------- Dark mode: readable accents ---------- */
+body.dark-mode #dashboardPage, body.dark-mode #accountPage { --pro-1: #a5b4fc; }
+body.dark-mode .dash-status-upcoming { color: #93c5fd; background: rgba(59, 130, 246, .16); border-color: rgba(147, 197, 253, .28); }
+body.dark-mode .dash-srow-badge { color: color-mix(in srgb, var(--accent, #a5b4fc) 55%, #ffffff); background: color-mix(in srgb, var(--accent, #6366f1) 18%, transparent); }
+body.dark-mode #dashboardPage .dash-view-full-btn { color: #c7d2fe !important; }
+
+/* White letters on light subject colours: a light shade keeps them readable (both themes) */
+#studentPortalPage .ams-summary-table td div[style*="color:white"],
+#studentPortalPage .ams-subj-icon {
+    background-image: linear-gradient(rgba(0, 0, 0, .26), rgba(0, 0, 0, .26)) !important;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .25);
+}

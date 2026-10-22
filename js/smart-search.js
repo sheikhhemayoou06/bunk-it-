@@ -2039,6 +2039,59 @@
         return { days, ranked };
     }
 
+    // Leave planner (My Portal → Leave Planner): skips per subject, per weekday and the
+    // best days to take off, for both views. with = OD/ML under the college rule,
+    // original = present only (OD/ML hours left out).
+    function leavePlan(opts = {}) {
+        const cls = getSelectedClassObj();
+        const raw = getAttendanceDataRaw();
+        if (!cls || !raw.length) return null;
+        const minCriteria = getMinCriteria();
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const horizon = opts.days || 14;
+        const original = raw.map(s => {
+            const odml = Math.min(Number(s.odml) || 0, Number(s.attended) || 0);
+            return odml ? { ...s, attended: (Number(s.attended) || 0) - odml, odml: 0, initialOdml: 0 } : s;
+        });
+        // One sample date per weekday in the next 4 weeks (timetable that applies then)
+        const weekdays = [];
+        for (let k = 1; k <= 28 && weekdays.length < 7; k++) {
+            const d = addDays(t, k);
+            const ds = formatLocalDateSI(d);
+            const dow = d.getDay();
+            if (weekdays.some(w => w.dow === dow)) continue;
+            const counts = classesOnDate(cls, ds);
+            if (!Object.values(counts).reduce((a, b) => a + b, 0)) continue;
+            weekdays.push({ dow, date: ds, name: d.toLocaleDateString('en-IN', { weekday: 'long' }), counts });
+        }
+        weekdays.sort((a, b) => ((a.dow + 6) % 7) - ((b.dow + 6) % 7));
+
+        const build = (data) => {
+            const subjects = data.map(sub => {
+                const c = countsOf(sub);
+                const st = getSubjectAnalysis(c.present + c.odml, c.held, c.remaining, minCriteria, c.odml).stats;
+                return { code: sub.code, name: sub.name || sub.code, short: sub.shortName || sub.name || sub.code,
+                    pct: st.currentPercent, skips: st.maxSkippable, need: st.stillNeed, remaining: c.remaining,
+                    reachable: st.stillNeed <= c.remaining };
+            });
+            const skips = {}, names = {};
+            subjects.forEach(x => { skips[x.code] = x.skips; names[x.code] = x.short; });
+            const days = weekdays.map(w => {
+                const codes = Object.keys(w.counts).filter(c => skips[c] !== undefined);
+                const times = codes.length ? Math.min(...codes.map(c => Math.floor(skips[c] / w.counts[c]))) : 0;
+                const limiting = codes.filter(c => Math.floor(skips[c] / w.counts[c]) === times).map(c => names[c]);
+                return { name: w.name, classes: codes.reduce((a, c) => a + w.counts[c], 0),
+                    subjects: codes.map(c => `${names[c]}${w.counts[c] > 1 ? ` ×${w.counts[c]}` : ''}`), times, limiting };
+            });
+            const { days: upcoming, ranked } = rankLeaveDays(cls, data, { to: formatLocalDateSI(addDays(t, horizon)) });
+            return { subjects, weekdays: days, upcoming, ranked,
+                totalSkips: subjects.reduce((a, x) => a + x.skips, 0),
+                atRisk: subjects.filter(x => x.pct < minCriteria * 100).length };
+        };
+        return { min: minCriteria * 100, horizon, with: build(raw), original: build(original),
+            hasOdml: raw.some(s => (Number(s.odml) || 0) > 0), reason: dayReason, fmt: fmtShort };
+    }
+
     function dayReason(x) {
         const parts = [`${x.classes} class${x.classes !== 1 ? 'es' : ''}: ${escapeHtml(x.subjects.join(', '))}`];
         if (x.len > 1) parts.push(`gives you <strong>${x.len} days off in a row</strong>`);
@@ -2983,6 +3036,7 @@
         setVoiceLang,
         normalizeIndic,
         computeClassAttendance: autoComputeAttendanceData,
+        leavePlan,
         // shared with js/smart-attach.js
         _chat: { appendUserMessage, appendThinking, renderAnswer, getAttendanceData: getAttendanceDataRaw, getSelectedClassObj, escapeHtml, analyzeSubject, getMinCriteria, updateNewChatBtn, scrollThread, periodsOn: (d) => { const c = getSelectedClassObj(); return c ? periodsOn(c, d) : []; }, examOn, dayChangeFor: (d) => { const c = getSelectedClassObj(); return c ? dayChangeFor(c, d) : null; } }
     };

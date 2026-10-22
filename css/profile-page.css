@@ -1208,13 +1208,13 @@ body.dark-mode .pt-warn {
 #accountPage .pf-ig-avatar span { background: var(--pro-grad) !important; }
 #accountPage .pf-ig-head { gap: 18px; }
 #accountPage .pf-ig-btns { gap: 10px; margin-top: 14px; }
-#accountPage .pf-ig-btn { border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); font-weight: 700; }
+#accountPage .pf-ig-btn { border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-surface); font-weight: 700; }
 #accountPage .pf-ig-btn.pf-ig-primary { background: var(--pro-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 20px -12px rgba(79, 70, 229, .8); }
 #accountPage .pf-ig-complete { border-radius: 14px; margin-top: 12px; }
 
 /* Shortcuts: even grid instead of a scrolling row of circles */
 #accountPage .pf-hls { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 10px; margin: 18px 0 6px; padding: 0; overflow: visible; }
-#accountPage .pf-hl { width: 100%; padding: 12px 4px 10px; border-radius: 16px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); gap: 8px; font-size: .78rem; font-weight: 600; transition: border-color .15s, transform .15s; }
+#accountPage .pf-hl { width: 100%; padding: 12px 4px 10px; border-radius: 16px; border: 1px solid var(--pf-border); background: var(--pf-surface); gap: 8px; font-size: .78rem; font-weight: 600; transition: border-color .15s, transform .15s; }
 #accountPage .pf-hl:hover { border-color: color-mix(in srgb, var(--pro-1) 45%, transparent); transform: translateY(-1px); }
 #accountPage .pf-hl-ring { width: 40px; height: 40px; padding: 0; border-radius: 12px; background: color-mix(in srgb, var(--pro-1) 10%, transparent); }
 #accountPage .pf-hl-in { border-radius: 12px; background: transparent !important; color: var(--pro-1) !important; font-size: 1rem; }
@@ -1231,8 +1231,8 @@ body.dark-mode .pt-warn {
 /* Profile sub-pages + rows: same professional look as Home */
 #accountPage { background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .10), transparent 70%), var(--pf-bg, #f8fafc); }
 body.dark-mode #accountPage { background: radial-gradient(800px 380px at 10% -80px, rgba(79, 70, 229, .22), transparent 70%), var(--pf-bg, #0f172a); }
-#accountPage .pf-sub-top { padding: 8px; margin-bottom: 14px; border-radius: 18px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); box-shadow: 0 10px 24px -20px rgba(15, 23, 42, .5); }
-#accountPage .pf-sub-top > button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-card, #fff); }
+#accountPage .pf-sub-top { padding: 8px; margin-bottom: 14px; border-radius: 18px; border: 1px solid var(--pf-border); background: var(--pf-surface); box-shadow: 0 10px 24px -20px rgba(15, 23, 42, .5); }
+#accountPage .pf-sub-top > button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--pf-border); background: var(--pf-surface); }
 #accountPage .pf-sub-top h1 { font-weight: 800; }
 #accountPage .pf-row-icon, #accountPage .pf-info-icon { width: 40px; height: 40px; border-radius: 12px; color: #fff !important; box-shadow: 0 8px 16px -10px rgba(15, 23, 42, .55); }
 #accountPage .pf-row-icon i, #accountPage .pf-info-icon i { color: #fff !important; }
@@ -1248,3 +1248,5 @@ body.dark-mode #accountPage { background: radial-gradient(800px 380px at 10% -80
 #accountPage .pf-tone-slate { background: linear-gradient(135deg, #475569, #64748b) !important; }
 #accountPage .pf-value-pill { border-radius: 999px; font-weight: 800; }
 #accountPage .pf-page-note { color: var(--pf-muted, #64748b); }
+#accountPage .pf-ig-btn, #accountPage .pf-hl, #accountPage .pf-sub-top > button { color: var(--pf-text); }
+body.dark-mode .pf-ig-complete b { color: #a5b4fc; }

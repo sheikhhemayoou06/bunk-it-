@@ -6474,13 +6474,13 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="css/dashboard-redesign.css?v=12">
+    <link rel="stylesheet" href="css/dashboard-redesign.css?v=13">
     <link rel="stylesheet" href="css/attendance-management.css?v=11">
     <link rel="stylesheet" href="css/smart-search.css?v=7">
     <link rel="stylesheet" href="css/smart-search-modern.css?v=12">
     <link rel="stylesheet" href="css/timetable-modes.css?v=13">
-    <link rel="stylesheet" href="css/profile-page.css?v=12">
-    <link rel="stylesheet" href="css/subjects-page.css?v=5">
+    <link rel="stylesheet" href="css/profile-page.css?v=14">
+    <link rel="stylesheet" href="css/subjects-page.css?v=6">
     <link rel="stylesheet" href="css/day-check.css?v=8">
     <link rel="stylesheet" href="css/onboarding.css?v=2">
     <link rel="stylesheet" href="css/scan-results.css?v=2">
@@ -8466,6 +8466,17 @@
                 let totalHeld = 0, totalAttended = 0, totalOdml = 0, totalCanMiss = 0, totalNeed = 0, totalEffective = 0, totalRemaining = 0;
                 let subjectsAtRisk = 0;
                 const healthCounts = { extremelySafe: 0, safe: 0, borderline: 0, accelerate: 0 };
+                // Original view (present only, no OD/ML) keeps its own totals
+                let totalCanMissO = 0, totalNeedO = 0, subjectsAtRiskO = 0;
+                const healthCountsO = { extremelySafe: 0, safe: 0, borderline: 0, accelerate: 0 };
+                const statusOf = (pct) => pct >= 85 ? ['extremely-safe', 'Extremely Safe', 'extremelySafe']
+                    : pct >= minAttendance ? ['safe', 'Safe', 'safe']
+                    : pct >= minAttendance - 5 ? ['borderline', 'Borderline', 'borderline']
+                    : ['danger', 'Need to Accelerate', 'accelerate'];
+                const pairHtml = (w, o) => `<span class="odv-with">${w}</span><span class="odv-orig">${o}</span>`;
+                const reachText = (pct, st) => pct >= minAttendance
+                    ? 'Already above'
+                    : st.stillNeed > st.remaining ? `Can't reach · short ${st.stillNeed - st.remaining}` : `Attend ${st.stillNeed} more`;
                 const colorOf = (cls) => `var(--dash-${cls === 'extremely-safe' ? 'safe' : cls})`;
                 const ring = (pct, color, size = 'lg') => `
                     <div class="dash-ring dash-ring-${size}" style="--p:${Math.max(0, Math.min(100, pct))}; --c:${color};">
@@ -8485,18 +8496,23 @@
                     totalCanMiss += stats.maxSkippable;
                     if (stats.stillNeed > 0 && percent < minAttendance) totalNeed += stats.stillNeed;
 
-                    let statusBadge, statusClass;
-                    if (percent >= 85) { healthCounts.extremelySafe++; statusClass = 'extremely-safe'; statusBadge = 'Extremely Safe'; }
-                    else if (percent >= minAttendance) { healthCounts.safe++; statusClass = 'safe'; statusBadge = 'Safe'; }
-                    else if (percent >= minAttendance - 5) { healthCounts.borderline++; subjectsAtRisk++; statusClass = 'borderline'; statusBadge = 'Borderline'; }
-                    else { healthCounts.accelerate++; subjectsAtRisk++; statusClass = 'danger'; statusBadge = 'Need to Accelerate'; }
+                    const [statusClass, statusBadge, hKey] = statusOf(percent);
+                    healthCounts[hKey]++;
+                    if (percent < minAttendance) subjectsAtRisk++;
 
-                    // Original attendance gets its own status colour
-                    const origClass = split.withoutPct >= minAttendance ? 'safe' : split.withoutPct >= minAttendance - 5 ? 'borderline' : 'danger';
-                    const canMiss = `${stats.maxSkippable} class${stats.maxSkippable !== 1 ? 'es' : ''}`;
-                    const toReach = percent >= minAttendance
-                        ? 'Already above'
-                        : stats.stillNeed > stats.remaining ? `Can't reach · short ${stats.stillNeed - stats.remaining}` : `Attend ${stats.stillNeed} more`;
+                    // Original: only classes you were present in, judged with no OD/ML at all
+                    const pctO = split.withoutPct;
+                    const statsO = getSubjectAnalysis(split.present, subject.totalHeld, subject.remaining, null, 0).stats;
+                    const [origClass, origBadge, hKeyO] = statusOf(pctO);
+                    healthCountsO[hKeyO]++;
+                    totalCanMissO += statsO.maxSkippable;
+                    if (pctO < minAttendance) { subjectsAtRiskO++; if (statsO.stillNeed > 0) totalNeedO += statsO.stillNeed; }
+
+                    const classesTxt = (n) => `${n} class${n !== 1 ? 'es' : ''}`;
+                    const canMiss = pairHtml(classesTxt(stats.maxSkippable), classesTxt(statsO.maxSkippable));
+                    const toReach = pairHtml(
+                        `<strong class="${percent >= minAttendance ? 'ok' : 'warn'}">${reachText(percent, stats)}</strong>`,
+                        `<strong class="${pctO >= minAttendance ? 'ok' : 'warn'}">${reachText(pctO, statsO)}</strong>`);
                     const accent = typeof getSubjectColor === 'function' ? getSubjectColor(idx) : '#6366f1';
                     const initials = (typeof getSubjectAcronym === 'function' ? getSubjectAcronym(subject.name) : subject.name).slice(0, 3);
 
@@ -8508,7 +8524,8 @@
                                     <strong>${subject.name}</strong>
                                     <span>${subject.code}${split.odml ? ` · ${split.odml} OD/ML hour${split.odml !== 1 ? 's' : ''}` : ''}</span>
                                 </div>
-                                <span class="dash-badge ${statusClass}">${statusBadge}</span>
+                                <span class="dash-badge ${statusClass} odv-with">${statusBadge}</span>
+                                <span class="dash-badge ${origClass} odv-orig">${origBadge}</span>
                             </div>
                             <div class="dash-srow-metrics">
                                 <div class="dash-metric odv-orig">
@@ -8522,15 +8539,15 @@
                                     <div class="dash-metric-value" style="color:${colorOf(statusClass)}">${percent.toFixed(1)}%</div>
                                     <div class="dash-metric-bar"><span style="width:${percent}%; background:${colorOf(statusClass)}"></span><i style="left:${minAttendance}%"></i></div>
                                     <div class="dash-metric-sub">${split.capped
-                                        ? `${split.present} present + ${split.odmlCounted} of ${split.odml} OD/ML (${split.limitLabel})`
+                                        ? `${split.present} present + ${split.odmlCounted} of ${split.odml} OD/ML${split.limitLabel ? ` (${split.limitLabel})` : ''}`
                                         : `${split.present + split.odmlCounted} / ${split.totalHeld} incl. ${split.odml} OD/ML`}${split.allowance !== null && split.odml
                                         ? `<div class="dash-allow ${split.belowBand ? 'bad' : ''}">OD/ML allowance: ${Math.min(split.odml, split.allowance)} of ${split.allowance} h used${split.notApplied ? ` · ${split.notApplied}` : ''}</div>` : split.odml && (split.capped || split.notApplied) ? `<div class="dash-allow ${split.belowBand ? 'bad' : ''}">OD/ML: ${split.odmlCounted} of ${split.odml} h count${split.notApplied ? ` · ${split.notApplied}` : split.limitLabel ? ` (${split.limitLabel})` : ''}</div>` : ''}</div>
                                 </div>
                                 <div class="dash-metric dash-metric-plan">
                                     <div><span>You can miss</span><strong>${canMiss}</strong></div>
-                                    <div><span>To reach ${minAttendance}%</span><strong class="${percent >= minAttendance ? 'ok' : 'warn'}">${toReach}</strong></div>
+                                    <div><span>To reach ${minAttendance}%</span>${toReach}</div>
                                     ${stats.allowancePlan && split.odml && stats.allowancePlan.left && stats.allowancePlan.needWithFull < stats.allowancePlan.needWithoutMore
-                                        ? `<div><span>With full OD/ML</span><strong>Attend ${stats.allowancePlan.needWithFull} of ${subject.remaining}</strong></div>` : ''}
+                                        ? `<div class="odv-with"><span>With full OD/ML</span><strong>Attend ${stats.allowancePlan.needWithFull} of ${subject.remaining}</strong></div>` : ''}
                                 </div>
                             </div>
                         </div>`;
@@ -8554,15 +8571,25 @@
                 }
                 const overallClass = overall.withPct >= minAttendance ? 'safe' : overall.withPct >= minAttendance - 5 ? 'borderline' : 'danger';
                 const origClass = overall.withoutPct >= minAttendance ? 'safe' : overall.withoutPct >= minAttendance - 5 ? 'borderline' : 'danger';
-                const message = overallRule
-                    ? (overall.withPct >= minAttendance
-                        ? `Overall attendance is at or above ${minAttendance}% (your college counts all subjects together). You can still miss <strong>${totalCanMiss}</strong> class${totalCanMiss !== 1 ? 'es' : ''} in total.`
-                        : overallStats.stillNeed > overallStats.remaining
+                // Same numbers for the Original view: present only, no OD/ML
+                let overallStatsO = null;
+                if (overallRule) {
+                    overallStatsO = getSubjectAnalysis(overall.present, totalHeld, totalRemaining, null, 0).stats;
+                    totalCanMissO = overallStatsO.maxSkippable;
+                    totalNeedO = overall.withoutPct >= minAttendance ? 0 : overallStatsO.stillNeed;
+                }
+                const messageFor = (pct, canMiss, need, atRisk, ovStats) => overallRule
+                    ? (pct >= minAttendance
+                        ? `Overall attendance is at or above ${minAttendance}% (your college counts all subjects together). You can still miss <strong>${canMiss}</strong> class${canMiss !== 1 ? 'es' : ''} in total.`
+                        : ovStats.stillNeed > ovStats.remaining
                             ? `Overall attendance can't reach ${minAttendance}% this semester, even attending every class.`
-                            : `Overall attendance is below ${minAttendance}%. Attend <strong>${totalNeed}</strong> more class${totalNeed !== 1 ? 'es' : ''} to get back above it.`)
-                    : subjectsAtRisk === 0
-                    ? `All subjects are at or above ${minAttendance}%. You can still miss <strong>${totalCanMiss}</strong> class${totalCanMiss !== 1 ? 'es' : ''} in total.`
-                    : `<strong>${subjectsAtRisk}</strong> subject${subjectsAtRisk !== 1 ? 's need' : ' needs'} attention. Attend <strong>${totalNeed}</strong> more class${totalNeed !== 1 ? 'es' : ''} to get back above ${minAttendance}%.`;
+                            : `Overall attendance is below ${minAttendance}%. Attend <strong>${need}</strong> more class${need !== 1 ? 'es' : ''} to get back above it.`)
+                    : atRisk === 0
+                    ? `All subjects are at or above ${minAttendance}%. You can still miss <strong>${canMiss}</strong> class${canMiss !== 1 ? 'es' : ''} in total.`
+                    : `<strong>${atRisk}</strong> subject${atRisk !== 1 ? 's need' : ' needs'} attention. Attend <strong>${need}</strong> more class${need !== 1 ? 'es' : ''} to get back above ${minAttendance}%.`;
+                const message = pairHtml(
+                    messageFor(overall.withPct, totalCanMiss, totalNeed, subjectsAtRisk, overallStats),
+                    messageFor(overall.withoutPct, totalCanMissO, totalNeedO, subjectsAtRiskO, overallStatsO));
                 const todayCount = typeof getTodayClassCount === 'function' ? getTodayClassCount() : 0;
 
                 // Hero + quick facts
@@ -8606,14 +8633,14 @@
                     <div class="dash-stat-card">
                         <div class="dash-stat-icon dash-icon-blue"><i class="fa-solid fa-person-walking-arrow-right"></i></div>
                         <div>
-                            <div class="dash-stat-value">${totalCanMiss}</div>
+                            <div class="dash-stat-value">${pairHtml(totalCanMiss, totalCanMissO)}</div>
                             <div class="dash-stat-title">Classes you can miss</div>
                         </div>
                     </div>
                     <div class="dash-stat-card">
                         <div class="dash-stat-icon dash-icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
                         <div>
-                            <div class="dash-stat-value">${subjectsAtRisk}</div>
+                            <div class="dash-stat-value">${pairHtml(subjectsAtRisk, subjectsAtRiskO)}</div>
                             <div class="dash-stat-title">Subjects at risk</div>
                         </div>
                     </div>
@@ -8622,11 +8649,12 @@
                 // Health Summary Donut: each slice is its share of all subjects
                 const n = currentAnalysisData.length || 1;
                 const deg = (count) => (count / n) * 360;
-                const a1 = deg(healthCounts.extremelySafe);
-                const a2 = a1 + deg(healthCounts.safe);
-                const a3 = a2 + deg(healthCounts.borderline);
-                healthContent.innerHTML = `
-                    <div class="dash-donut-chart" style="background: conic-gradient(
+                const donut = (hc, cls) => {
+                    const a1 = deg(hc.extremelySafe);
+                    const a2 = a1 + deg(hc.safe);
+                    const a3 = a2 + deg(hc.borderline);
+                    return `
+                    <div class="dash-donut-chart ${cls}" style="background: conic-gradient(
                         #10b981 0deg ${a1}deg,
                         #84cc16 ${a1}deg ${a2}deg,
                         #f59e0b ${a2}deg ${a3}deg,
@@ -8636,12 +8664,17 @@
                             <span class="num">${currentAnalysisData.length}</span>
                             <span class="txt">Subjects</span>
                         </div>
-                    </div>
+                    </div>`;
+                };
+                const legendRow = (color, label, key) => `<div class="dash-legend-item"><div class="dash-legend-item-left"><div class="dash-dot" style="background: ${color};"></div> ${label}</div> <strong>${pairHtml(healthCounts[key], healthCountsO[key])}</strong></div>`;
+                healthContent.innerHTML = `
+                    ${donut(healthCounts, 'odv-with')}
+                    ${donut(healthCountsO, 'odv-orig')}
                     <div class="dash-health-legend">
-                        <div class="dash-legend-item"><div class="dash-legend-item-left"><div class="dash-dot" style="background: #10b981;"></div> Extremely Safe</div> <strong>${healthCounts.extremelySafe}</strong></div>
-                        <div class="dash-legend-item"><div class="dash-legend-item-left"><div class="dash-dot" style="background: #84cc16;"></div> Safe</div> <strong>${healthCounts.safe}</strong></div>
-                        <div class="dash-legend-item"><div class="dash-legend-item-left"><div class="dash-dot" style="background: #f59e0b;"></div> Borderline</div> <strong>${healthCounts.borderline}</strong></div>
-                        <div class="dash-legend-item"><div class="dash-legend-item-left"><div class="dash-dot" style="background: #ef4444;"></div> Need to Accelerate</div> <strong>${healthCounts.accelerate}</strong></div>
+                        ${legendRow('#10b981', 'Extremely Safe', 'extremelySafe')}
+                        ${legendRow('#84cc16', 'Safe', 'safe')}
+                        ${legendRow('#f59e0b', 'Borderline', 'borderline')}
+                        ${legendRow('#ef4444', 'Need to Accelerate', 'accelerate')}
                     </div>
                 `;
             }
@@ -27496,8 +27529,8 @@ Answer helpfully using this context.`;
                     });
                 </script>
                 <!-- Attendance Management System -->
-                <script src="js/attendance-management.js?v=26"></script>
-                <script src="js/smart-search.js?v=40"></script>
+                <script src="js/attendance-management.js?v=28"></script>
+                <script src="js/smart-search.js?v=41"></script>
                 <script src="js/smart-attach.js?v=16"></script>
                 <script src="js/timetable-modes.js?v=14"></script>
                 <script src="js/profile-page.js?v=11"></script>

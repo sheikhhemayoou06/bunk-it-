@@ -512,6 +512,8 @@
             content = renderCumulativeView();
         } else if (amsCurrentView === 'detailed') {
             content = renderDetailedView(sc);
+        } else if (amsCurrentView === 'leave_planner') {
+            content = renderLeavePlannerView();
         }
 
         container.innerHTML = `
@@ -521,6 +523,7 @@
 
         attachEvents();
         populateMarkAttendance();
+        if (window.OdmlView) OdmlView.refresh();
 
         if (saved) {
             const wrap = container.querySelector('.pg-table-wrapper');
@@ -603,6 +606,17 @@
                     </div>
                     <div class="ams-card-arrow"><i class="fa-solid fa-chevron-right"></i></div>
                 </div>
+
+                <div class="ams-menu-card" onclick="window.amsNavigate('leave_planner')">
+                    <div class="ams-card-icon" style="background: #fce7f3; color: #db2777;">
+                        <i class="fa-solid fa-umbrella-beach"></i>
+                    </div>
+                    <div class="ams-card-text">
+                        <h3>Leave Planner</h3>
+                        <p>Classes you can skip, by subject and day, and the best days to take leave</p>
+                    </div>
+                    <div class="ams-card-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+                </div>
             </div>
         </div>`;
     }
@@ -633,6 +647,140 @@
         `;
     }
     
+    // --- Leave Planner: how many classes you can skip, and when ---
+    function renderLeavePlannerView() {
+        const plan = window.SmartSearch?.leavePlan ? SmartSearch.leavePlan({ days: 14 }) : null;
+        if (!plan) {
+            return `${renderHeader('Leave Planner')}
+                <div class="ams-empty-state" style="padding: 48px 20px;">
+                    <div class="ams-empty-icon"><i class="fa-solid fa-umbrella-beach"></i></div>
+                    <h4>No attendance yet</h4>
+                    <p>Mark some attendance first, then come back to plan your leaves.</p>
+                </div>`;
+        }
+        const esc = (str) => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const cls = (n) => `${n} class${n !== 1 ? 'es' : ''}`;
+        const min = plan.min;
+
+        const section = (v) => {
+            const best = v.ranked.slice(0, 3);
+            const hero = `
+                <div class="lp-hero">
+                    <div class="lp-hero-num"><strong>${v.totalSkips}</strong><span>classes you can skip in total</span></div>
+                    <p>${v.atRisk
+                        ? `<i class="fa-solid fa-triangle-exclamation"></i> ${v.atRisk} subject${v.atRisk !== 1 ? 's are' : ' is'} below ${min}%. Skip carefully and attend those first.`
+                        : `<i class="fa-solid fa-circle-check"></i> Every subject is at or above ${min}%.`}
+                    ${best[0] ? `<br>Best day to take leave: <strong>${plan.fmt(best[0].date)}</strong>` : '<br>No fully safe day in the next 2 weeks.'}</p>
+                </div>`;
+
+            const subjects = v.subjects.slice().sort((a, b) => a.skips - b.skips).map(x => `
+                <tr>
+                    <td><strong>${esc(x.short)}</strong><small>${esc(x.code)}</small></td>
+                    <td style="color:${getPctColor(x.pct)};font-weight:700;">${x.pct.toFixed(1)}%</td>
+                    <td><span class="lp-pill ${x.skips === 0 ? 'bad' : x.skips <= 2 ? 'warn' : 'ok'}">${x.skips}</span></td>
+                    <td>${x.pct >= min && x.skips > 0 ? '<span class="lp-muted">Safe</span>'
+                        : !x.reachable ? `<span class="lp-bad">Can't reach ${min}%</span>`
+                        : x.need > 0 ? `Attend ${x.need} of ${x.remaining}` : '<span class="lp-muted">Attend all</span>'}</td>
+                </tr>`).join('');
+
+            const weekdays = v.weekdays.map(w => `
+                <div class="lp-day ${w.times === 0 ? 'bad' : w.times <= 1 ? 'warn' : 'ok'}">
+                    <div class="lp-day-top"><strong>${w.name}</strong><span>${cls(w.classes)}</span></div>
+                    <div class="lp-day-num">${w.times === 0 ? 'Don\'t skip' : `Skip ${w.times} ${w.name}${w.times !== 1 ? 's' : ''}`}</div>
+                    <small>${esc(w.subjects.join(', '))}</small>
+                    ${w.times <= 1 && w.limiting.length ? `<small class="lp-limit">Limited by ${esc(w.limiting.join(', '))}</small>` : ''}
+                </div>`).join('');
+
+            const bestHtml = best.length ? best.map((x, i) => `
+                <div class="lp-best">
+                    <span class="lp-rank">${i + 1}</span>
+                    <div><strong>${plan.fmt(x.date)}</strong><p>${plan.reason(x)}</p></div>
+                </div>`).join('')
+                : '<p class="lp-muted" style="padding:8px 4px;">No day in the next 2 weeks is safe for every subject. Attend regularly to build a buffer.</p>';
+
+            const upcoming = v.upcoming.map(x => `
+                <div class="lp-up">
+                    <strong>${plan.fmt(x.date)}</strong>
+                    <span>${cls(x.classes)}</span>
+                    ${x.exam ? `<em class="bad">Exam: ${esc(x.exam.title)}</em>`
+                        : x.safe ? `<em class="${x.minLeft <= 1 ? 'warn' : 'ok'}">${x.minLeft <= 0 ? 'Safe, uses a last skip' : x.minLeft === 1 ? 'Safe, 1 skip left after' : 'Safe'}${x.len > 1 ? ` · ${x.len}-day break` : ''}</em>`
+                        : `<em class="bad">Avoid: ${esc(x.blockers.join(', '))}</em>`}
+                </div>`).join('');
+
+            return `
+                ${hero}
+                <div class="lp-card">
+                    <h3><i class="fa-solid fa-star"></i> Suggested leave days</h3>
+                    ${bestHtml}
+                </div>
+                <div class="lp-card">
+                    <h3><i class="fa-solid fa-book-open"></i> Subject-wise</h3>
+                    <div class="lp-table-wrap"><table class="lp-table">
+                        <thead><tr><th>Subject</th><th>Now</th><th>Can skip</th><th>To stay ≥ ${min}%</th></tr></thead>
+                        <tbody>${subjects}</tbody>
+                    </table></div>
+                </div>
+                <div class="lp-card">
+                    <h3><i class="fa-solid fa-calendar-week"></i> Day-wise: whole days you can skip</h3>
+                    <div class="lp-days">${weekdays || '<p class="lp-muted">No classes in the timetable.</p>'}</div>
+                </div>
+                <div class="lp-card">
+                    <h3><i class="fa-solid fa-calendar-days"></i> Next 2 weeks</h3>
+                    <div class="lp-ups">${upcoming || '<p class="lp-muted">No classes in the next 2 weeks.</p>'}</div>
+                </div>`;
+        };
+
+        return `
+            ${renderHeader('Leave Planner')}
+            <style>
+                .lp-switch { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin: 4px 0 16px; }
+                .lp-switch p { margin:0; font-size:0.82rem; color: var(--medium-text); }
+                .lp-hero { background: linear-gradient(135deg, #db2777, #7c3aed); color:#fff; border-radius:20px; padding:22px; margin-bottom:16px; display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+                .lp-hero-num strong { display:block; font-size:2.6rem; line-height:1; font-weight:800; }
+                .lp-hero-num span { font-size:0.82rem; opacity:0.9; }
+                .lp-hero p { margin:0; flex:1; min-width:200px; font-size:0.92rem; line-height:1.5; }
+                .lp-card { background: var(--card-bg); border:1px solid var(--border-color); border-radius:18px; padding:18px; margin-bottom:16px; box-shadow: var(--card-shadow); }
+                .lp-card h3 { margin:0 0 12px; font-size:1rem; display:flex; gap:8px; align-items:center; }
+                .lp-card h3 i { color:#db2777; }
+                .lp-best { display:flex; gap:12px; align-items:flex-start; padding:10px 4px; border-top:1px solid var(--border-color); }
+                .lp-best:first-of-type { border-top:none; }
+                .lp-best p { margin:2px 0 0; font-size:0.85rem; color: var(--medium-text); }
+                .lp-rank { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#fce7f3; color:#db2777; font-weight:800; display:grid; place-items:center; }
+                .lp-table-wrap { overflow-x:auto; }
+                .lp-table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+                .lp-table th { text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color: var(--medium-text); padding:8px; border-bottom:1px solid var(--border-color); }
+                .lp-table td { padding:10px 8px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
+                .lp-table td small { display:block; font-size:0.72rem; color: var(--medium-text); }
+                .lp-pill { display:inline-block; min-width:32px; text-align:center; padding:3px 10px; border-radius:999px; font-weight:800; }
+                .lp-pill.ok { background:#dcfce7; color:#15803d; } .lp-pill.warn { background:#fef3c7; color:#b45309; } .lp-pill.bad { background:#fee2e2; color:#b91c1c; }
+                .lp-muted { color: var(--medium-text); } .lp-bad { color:#dc2626; font-weight:600; }
+                .lp-days { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+                .lp-day { border-radius:14px; padding:12px; border:1px solid var(--border-color); display:flex; flex-direction:column; gap:4px; }
+                .lp-day.ok { background: rgba(34,197,94,0.08); } .lp-day.warn { background: rgba(245,158,11,0.10); } .lp-day.bad { background: rgba(239,68,68,0.08); }
+                .lp-day-top { display:flex; justify-content:space-between; font-size:0.85rem; } .lp-day-top span { color: var(--medium-text); font-size:0.75rem; }
+                .lp-day-num { font-weight:800; font-size:1rem; }
+                .lp-day.ok .lp-day-num { color:#15803d; } .lp-day.warn .lp-day-num { color:#b45309; } .lp-day.bad .lp-day-num { color:#b91c1c; }
+                .lp-day small { font-size:0.72rem; color: var(--medium-text); } .lp-day small.lp-limit { color:#b45309; }
+                .lp-ups { display:flex; flex-direction:column; }
+                .lp-up { display:grid; grid-template-columns: 90px 80px 1fr; gap:8px; align-items:center; padding:9px 2px; border-top:1px solid var(--border-color); font-size:0.86rem; }
+                .lp-up:first-child { border-top:none; }
+                .lp-up span { color: var(--medium-text); font-size:0.8rem; }
+                .lp-up em { font-style:normal; font-weight:600; font-size:0.8rem; }
+                .lp-up em.ok { color:#15803d; } .lp-up em.warn { color:#b45309; } .lp-up em.bad { color:#dc2626; }
+                @media (max-width: 480px) {
+                    .lp-hero { padding:18px; } .lp-hero-num strong { font-size:2.2rem; }
+                    .lp-up { grid-template-columns: 1fr auto; } .lp-up em { grid-column: 1 / -1; }
+                    .lp-days { grid-template-columns: 1fr 1fr; }
+                }
+            </style>
+            <div class="lp-switch">
+                ${window.OdmlView ? OdmlView.toggleHTML() : ''}
+                <p><span class="odv-with">Duty &amp; medical leave counted by your OD/ML rule</span><span class="odv-orig">Only classes you were present in</span></p>
+            </div>
+            <div class="odv-with">${section(plan.with)}</div>
+            <div class="odv-orig">${section(plan.original)}</div>`;
+    }
+
     function renderDetailedView(sc) {
         const records = buildRecords();
         const filtered = applyFilters(records);
@@ -1221,7 +1369,13 @@
         });
 
         const sortedMonths = Object.keys(monthMap).sort().reverse();
-        if (!sortedMonths.length) return '';
+        if (!sortedMonths.length) {
+            return `<div class="ams-empty-state">
+                <div class="ams-empty-icon"><i class="fa-solid fa-chart-column"></i></div>
+                <h4>No marked days yet</h4>
+                <p>The month-by-month table fills in as you mark attendance in Period-wise. Totals entered when you set up the class appear in Course-wise.</p>
+            </div>`;
+        }
 
         const cell = (m, key, color, value) => {
             const active = amsCumDetail && amsCumDetail.month === m && amsCumDetail.status === key;
